@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
-import type { UserSession } from "../App";
+import type { Session } from "../App";
 import ItemGrid from "../components/ItemGrid";
 import OrderPanel from "../components/OrderPanel";
 
@@ -10,52 +10,31 @@ interface TerminalItem {
   price: number;
 }
 
-interface OrderItem {
-  itemId: string;
-  name: string;
-  qty: number;
-  unitPrice: number;
-  total: number;
-}
-
 interface Order {
   id: string;
   status: string;
-  items: OrderItem[];
+  items: { itemId: string; name: string; qty: number; unitPrice: number; total: number }[];
 }
 
 interface Props {
-  session: UserSession;
+  session: Session & { type: "pos" };
   onLogout: () => void;
 }
 
 function POSLayout({ session, onLogout }: Props) {
-  const [terminalId, setTerminalId] = useState<string>("");
-  const [terminals, setTerminals] = useState<{ id: string; name: string }[]>([]);
+  const terminalId = session.terminalId;
   const [items, setItems] = useState<TerminalItem[]>([]);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api.get<{ id: string; name: string }[]>("/terminals").then((data) => {
-      setTerminals(data);
-      if (data.length > 0) {
-        const saved = localStorage.getItem("pos-terminal");
-        const tid = saved && data.find((t) => t.id === saved) ? saved : data[0].id;
-        setTerminalId(tid);
-      }
+  const loadItems = useCallback(() => {
+    api.get<TerminalItem[]>(`/terminals/${terminalId}/items`).then((data) => {
+      setItems(data);
       setLoading(false);
     });
-  }, []);
+  }, [terminalId]);
 
-  const loadItems = useCallback((tid: string) => {
-    localStorage.setItem("pos-terminal", tid);
-    api.get<TerminalItem[]>(`/terminals/${tid}/items`).then(setItems);
-  }, []);
-
-  useEffect(() => {
-    if (terminalId) loadItems(terminalId);
-  }, [terminalId, loadItems]);
+  useEffect(() => { loadItems(); }, [loadItems]);
 
   const handleNewOrder = async () => {
     const data = await api.post<{ id: string }>("/orders/open", { terminalId });
@@ -89,9 +68,7 @@ function POSLayout({ session, onLogout }: Props) {
 
   const handleCancel = async () => {
     if (!currentOrder) return;
-    await api.post(`/orders/${currentOrder.id}/cancel`, {
-      reason: "Cancelled from terminal",
-    });
+    await api.post(`/orders/${currentOrder.id}/cancel`, { reason: "Cancelled from terminal" });
     setCurrentOrder(null);
   };
 
@@ -107,28 +84,14 @@ function POSLayout({ session, onLogout }: Props) {
     <div className="min-h-screen flex flex-col">
       <header className="bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-700">
         <div className="flex items-center gap-4">
-          <h1 className="text-white font-bold text-lg">POS Terminal</h1>
-          {terminals.length > 1 && (
-            <select
-              value={terminalId}
-              onChange={(e) => setTerminalId(e.target.value)}
-              className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600"
-            >
-              {terminals.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          )}
+          <h1 className="text-white font-bold text-lg">{session.terminalName}</h1>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-gray-400 text-sm">{session.user.name}</span>
           <button
             onClick={onLogout}
             className="bg-red-600 hover:bg-red-500 text-white text-sm px-3 py-1 rounded"
           >
-            Logout
+            Exit
           </button>
         </div>
       </header>

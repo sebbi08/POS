@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { authMiddleware, requireAdmin } from "../middleware/auth.middleware";
+import { checkAdmin } from "../middleware/auth.middleware";
 import {
   createTerminal,
   updateTerminal,
@@ -9,31 +9,38 @@ import { terminals, getTerminalItems } from "../../modules/terminals/terminals.p
 
 const router = Router();
 
-router.get("/", authMiddleware, (_req: Request, res: Response): void => {
-  res.json(Array.from(terminals.values()));
+// Public: list active (non-archived) terminals
+router.get("/", (_req: Request, res: Response): void => {
+  res.json(
+    Array.from(terminals.values())
+      .filter((t) => !t.archived)
+      .map(({ id, name, groupIds }) => ({ id, name, groupIds }))
+  );
 });
 
-router.post("/", authMiddleware, requireAdmin, (req: Request, res: Response): void => {
+// Admin-only mutations
+router.post("/", checkAdmin, (req: Request, res: Response): void => {
   const { name, groupIds, printerVendorId, printerProductId } = req.body;
   createTerminal(name, groupIds, printerVendorId, printerProductId).then((id) =>
     res.json({ id })
   );
 });
 
-router.put("/:id", authMiddleware, requireAdmin, (req: Request, res: Response): void => {
+router.put("/:id", checkAdmin, (req: Request, res: Response): void => {
   const { name, groupIds, printerVendorId, printerProductId } = req.body;
   updateTerminal(req.params.id, name, groupIds, printerVendorId, printerProductId).then(() =>
     res.json({ status: "updated" })
   );
 });
 
-router.delete("/:id", authMiddleware, requireAdmin, (req: Request, res: Response): void => {
+router.delete("/:id", checkAdmin, (req: Request, res: Response): void => {
   archiveTerminal(req.params.id).then(() =>
     res.json({ status: "archived" })
   );
 });
 
-router.get("/:id/items", authMiddleware, (req: Request, res: Response): void => {
+// Public: get items for a terminal
+router.get("/:id/items", (req: Request, res: Response): void => {
   res.json(getTerminalItems(req.params.id));
 });
 

@@ -1,9 +1,10 @@
 import { Router, Request, Response } from "express";
-import { authMiddleware, requireAdmin } from "../middleware/auth.middleware";
+import { checkAdmin } from "../middleware/auth.middleware";
 import { getDailyReport, transactionHistory } from "../../modules/reporting/reporting.projections";
 
 const router = Router();
-router.use(authMiddleware, requireAdmin);
+
+router.use(checkAdmin);
 
 router.get("/daily", (req: Request, res: Response): void => {
   const date = req.query.date as string | undefined;

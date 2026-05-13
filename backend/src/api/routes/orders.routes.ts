@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import { authMiddleware } from "../middleware/auth.middleware";
 import {
   openOrder,
   addItemToOrder,
@@ -14,7 +13,6 @@ import { orders } from "../../modules/orders/orders.projections";
 import { generatePickupReceiptPdf, generateFinalReceiptPdf } from "../../modules/receipts/receipts.pdf";
 
 const router = Router();
-router.use(authMiddleware);
 
 router.get("/", (req: Request, res: Response): void => {
   const terminalId = req.query.terminalId as string;
@@ -26,12 +24,12 @@ router.get("/", (req: Request, res: Response): void => {
 
 router.post("/open", (req: Request, res: Response): void => {
   const { terminalId } = req.body;
-  openOrder(terminalId, req.userId!).then((id) => res.json({ id }));
+  openOrder(terminalId, terminalId).then((id) => res.json({ id }));
 });
 
-router.post("/:id/items", (req: Request, res: Response): void => {
-  const { itemId, qty } = req.body;
-  addItemToOrder(req.params.id, itemId, qty || 1).then(() =>
+router.post("/:id/items", (_req: Request, res: Response): void => {
+  const { itemId, qty } = _req.body;
+  addItemToOrder(_req.params.id, itemId, qty || 1).then(() =>
     res.json({ status: "item added" })
   );
 });
@@ -68,7 +66,7 @@ router.post("/:id/close", (req: Request, res: Response): void => {
 
 router.post("/:id/cancel", (req: Request, res: Response): void => {
   const { reason } = req.body;
-  cancelOrder(req.params.id, reason || "Cancelled from terminal", req.userId!).then(() =>
+  cancelOrder(req.params.id, reason || "Cancelled from terminal", "terminal").then(() =>
     res.json({ status: "cancelled" })
   );
 });

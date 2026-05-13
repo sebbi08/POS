@@ -1,46 +1,61 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { api } from "./api/client";
 import Login from "./views/Login";
 import POSLayout from "./views/POSLayout";
 import AdminLayout from "./views/AdminLayout";
 
-export interface UserSession {
-  sessionId: string;
-  user: { id: string; name: string; role: "admin" | "terminal" };
-}
+export type Session =
+  | { type: "pos"; terminalId: string; terminalName: string }
+  | { type: "admin" }
+  | null;
 
 function App() {
-  const [session, setSession] = useState<UserSession | null>(() => {
+  const [session, setSession] = useState<Session>(() => {
     const stored = localStorage.getItem("pos-session");
-    return stored ? JSON.parse(stored) : null;
+    if (stored) return JSON.parse(stored);
+    return null;
   });
 
-  useEffect(() => {
-    if (session) {
-      localStorage.setItem("pos-session", JSON.stringify(session));
-    } else {
-      localStorage.removeItem("pos-session");
-    }
-  }, [session]);
+  const handleEnterPOS = (terminalId: string, terminalName: string) => {
+    const s: Session = { type: "pos", terminalId, terminalName };
+    localStorage.setItem("pos-session", JSON.stringify(s));
+    setSession(s);
+  };
 
-  const handleLogin = (s: UserSession) => setSession(s);
-  const handleLogout = () => setSession(null);
+  const handleEnterAdmin = () => {
+    const s: Session = { type: "admin" };
+    localStorage.setItem("pos-session", JSON.stringify(s));
+    setSession(s);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("pos-session");
+    api.clearAdminPin();
+    setSession(null);
+  };
 
   if (!session) {
-    return <Login onLogin={handleLogin} />;
+    return <Login onEnterPOS={handleEnterPOS} onEnterAdmin={handleEnterAdmin} />;
   }
 
   return (
     <Routes>
       <Route
         path="/pos/*"
-        element={<POSLayout session={session} onLogout={handleLogout} />}
+        element={
+          session.type === "pos" ? (
+            <POSLayout session={session} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/admin" />
+          )
+        }
       />
       <Route
         path="/admin/*"
         element={
-          session.user.role === "admin" ? (
-            <AdminLayout session={session} onLogout={handleLogout} />
+          session.type === "admin" ? (
+            <AdminLayout onLogout={handleLogout} />
           ) : (
             <Navigate to="/pos" />
           )
@@ -48,11 +63,7 @@ function App() {
       />
       <Route
         path="*"
-        element={
-          <Navigate
-            to={session.user.role === "admin" ? "/admin" : "/pos"}
-          />
-        }
+        element={<Navigate to={session.type === "admin" ? "/admin" : "/pos"} />}
       />
     </Routes>
   );

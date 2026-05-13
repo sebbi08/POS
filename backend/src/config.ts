@@ -6,8 +6,5 @@ export const config = {
   },
   receiptPdfDir:
     process.env.RECEIPT_PDF_DIR || "./data/receipts",
-  seedAdmin: {
-    name: process.env.SEED_ADMIN_NAME || "Admin",
-    pin: process.env.SEED_ADMIN_PIN || "0000",
-  },
+  adminPin: process.env.ADMIN_PIN || "0000",
 };

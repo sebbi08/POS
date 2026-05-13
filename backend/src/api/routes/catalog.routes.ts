@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { authMiddleware, requireAdmin } from "../middleware/auth.middleware";
+import { checkAdmin } from "../middleware/auth.middleware";
 import {
   createItemGroup,
   updateItemGroup,
@@ -12,12 +12,10 @@ import { groups, items } from "../../modules/catalog/catalog.projections";
 
 const router = Router();
 
-router.use(authMiddleware, requireAdmin);
+router.use(checkAdmin);
 
-// Item Groups
 router.get("/groups", (_req: Request, res: Response): void => {
-  const list = Array.from(groups.values());
-  res.json(list);
+  res.json(Array.from(groups.values()));
 });
 
 router.post("/groups", (req: Request, res: Response): void => {
@@ -38,10 +36,8 @@ router.delete("/groups/:id", (req: Request, res: Response): void => {
   );
 });
 
-// Items
 router.get("/items", (_req: Request, res: Response): void => {
-  const list = Array.from(items.values());
-  res.json(list);
+  res.json(Array.from(items.values()));
 });
 
 router.post("/items", (req: Request, res: Response): void => {

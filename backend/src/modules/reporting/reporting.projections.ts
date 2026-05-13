@@ -1,6 +1,5 @@
 import { registerProjection } from "../../projections/runner";
 import { DailyReport, TransactionRecord } from "./reporting.types";
-import { users } from "../auth/auth.projections";
 import { orders as ordersMap } from "../orders/orders.projections";
 
 export const transactionHistory: TransactionRecord[] = [];
@@ -37,7 +36,7 @@ export function initReportingProjections(): void {
         const order = ordersMap.get(orderId);
 
         if (order) {
-          const userName = users.get(order.userId)?.name ?? order.userId;
+          const userName = order.terminalId;
 
           const itemsText = order.items
             .map((i: { qty: number; name: string }) => `${i.qty}x ${i.name}`)

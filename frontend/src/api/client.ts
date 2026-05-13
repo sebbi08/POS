@@ -1,9 +1,12 @@
 const BASE = "/api";
 
-function getSessionId(): string | null {
-  const stored = localStorage.getItem("pos-session");
-  if (!stored) return null;
-  return JSON.parse(stored).sessionId;
+let adminPin: string | null = null;
+
+function getAdminPin(): string | null {
+  if (!adminPin) {
+    adminPin = localStorage.getItem("pos-admin-pin");
+  }
+  return adminPin;
 }
 
 async function request<T>(
@@ -14,9 +17,9 @@ async function request<T>(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  const sessionId = getSessionId();
-  if (sessionId) {
-    headers["x-session-id"] = sessionId;
+  const pin = getAdminPin();
+  if (pin) {
+    headers["x-admin-pin"] = pin;
   }
 
   const res = await fetch(`${BASE}${path}`, {
@@ -38,4 +41,12 @@ export const api = {
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   delete: <T>(path: string) => request<T>("DELETE", path),
+  setAdminPin: (pin: string) => {
+    adminPin = pin;
+    localStorage.setItem("pos-admin-pin", pin);
+  },
+  clearAdminPin: () => {
+    adminPin = null;
+    localStorage.removeItem("pos-admin-pin");
+  },
 };
