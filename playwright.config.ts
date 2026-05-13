@@ -1,4 +1,15 @@
 import { defineConfig } from "@playwright/test";
+import { execSync } from "child_process";
+
+// Auto-create test database before tests run
+try {
+  execSync(
+    `docker compose exec -T postgres psql -U pos -c "CREATE DATABASE pos_e2e;"`,
+    { stdio: "ignore" }
+  );
+} catch {
+  // Database may already exist, that's fine
+}
 
 export default defineConfig({
   testDir: "./e2e",
