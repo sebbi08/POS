@@ -1,0 +1,180 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import CatalogManager from "../components/CatalogManager";
+import AdminLayout from "../views/AdminLayout";
+import TransactionHistory from "../components/TransactionHistory";
+import DailyOverview from "../components/DailyOverview";
+
+vi.mock("../api/client", () => ({
+  api: {
+    get: vi.fn((_path: string) => {
+      if (_path === "/reporting/daily") {
+        return Promise.resolve({
+          date: "2026-05-13", orderCount: 0, cancelledCount: 0,
+          totalGross: 0, totalVat: 0, totalNet: 0,
+          vatByGroup: {}, byTerminal: {}, topItems: [],
+        });
+      }
+      return Promise.resolve([]);
+    }),
+    post: vi.fn().mockResolvedValue({ id: "new-id" }),
+    put: vi.fn().mockResolvedValue({ status: "updated" }),
+    delete: vi.fn().mockResolvedValue({ status: "archived" }),
+    clearAdminPin: vi.fn(),
+  },
+}));
+
+import { api } from "../api/client";
+
+describe("CatalogManager", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows group list with VAT rates", async () => {
+    vi.mocked(api.get).mockResolvedValue([
+      { id: "g1", name: "Hot Drinks", vatRate: 19, archived: false },
+      { id: "g2", name: "Food", vatRate: 7, archived: false },
+    ]);
+    render(<CatalogManager type="groups" />);
+    await waitFor(() => {
+      expect(screen.getByText("Hot Drinks")).toBeInTheDocument();
+      expect(screen.getByText("19%")).toBeInTheDocument();
+    });
+  });
+
+  it("shows item list with group names and prices", async () => {
+    vi.mocked(api.get).mockResolvedValueOnce([
+      { id: "g1", name: "Hot Drinks", vatRate: 19, archived: false },
+    ]);
+    vi.mocked(api.get).mockResolvedValueOnce([
+      { id: "i1", name: "Espresso", groupId: "g1", price: 2.50, archived: false },
+    ]);
+    render(<CatalogManager type="items" />);
+    await waitFor(() => {
+      expect(screen.getByText("Espresso")).toBeInTheDocument();
+      expect(screen.getByText("2.50€")).toBeInTheDocument();
+    });
+  });
+
+  it("Archive button calls DELETE (never removes)", async () => {
+    vi.mocked(api.get).mockResolvedValue([
+      { id: "g1", name: "Drinks", vatRate: 19, archived: false },
+    ]);
+    render(<CatalogManager type="groups" />);
+    await waitFor(() => screen.getByText("Drinks"));
+
+    fireEvent.click(screen.getByText("Archive"));
+    expect(api.delete).toHaveBeenCalledWith("/catalog/groups/g1");
+  });
+});
+
+describe("AdminLayout", () => {
+  it("renders all navigation tabs", () => {
+    render(<AdminLayout onLogout={vi.fn()} />);
+    expect(screen.getByText("Item Groups")).toBeInTheDocument();
+    expect(screen.getByText("Items")).toBeInTheDocument();
+    expect(screen.getByText("Terminals")).toBeInTheDocument();
+    expect(screen.getByText("Company")).toBeInTheDocument();
+    expect(screen.getByText("Daily Overview")).toBeInTheDocument();
+    expect(screen.getByText("Transactions")).toBeInTheDocument();
+  });
+
+  it("no longer has Users tab", () => {
+    render(<AdminLayout onLogout={vi.fn()} />);
+    expect(screen.queryByText("Users")).not.toBeInTheDocument();
+  });
+
+  it("Logout button is present", () => {
+    render(<AdminLayout onLogout={vi.fn()} />);
+    expect(screen.getByText("Logout")).toBeInTheDocument();
+  });
+
+  it("calls onLogout when logout clicked", () => {
+    const onLogout = vi.fn();
+    render(<AdminLayout onLogout={onLogout} />);
+    fireEvent.click(screen.getByText("Logout"));
+    expect(onLogout).toHaveBeenCalled();
+  });
+});
+
+describe("TransactionHistory", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows closed and cancelled orders with status badges", async () => {
+    vi.mocked(api.get).mockResolvedValue([
+      { orderId: "abc12345-1234", terminalId: "Bar", userName: "Bar", items: "1x Espresso", totalGross: 2.50, totalVat: 0.40, status: "closed", closedAt: "2026-01-01T12:00:00Z" },
+      { orderId: "def67890-5678", terminalId: "Bar", userName: "Bar", items: "2x Latte", totalGross: 7.00, totalVat: 1.12, status: "cancelled", reason: "Wrong order", closedAt: "2026-01-01T12:05:00Z" },
+    ]);
+
+    render(<TransactionHistory />);
+    await waitFor(() => {
+      expect(screen.getByText("closed")).toBeInTheDocument();
+      expect(screen.getByText("cancelled")).toBeInTheDocument();
+      expect(screen.getByText("Wrong order")).toBeInTheDocument();
+    });
+  });
+
+  it("has search and filter inputs", async () => {
+    vi.mocked(api.get).mockResolvedValue([]);
+    render(<TransactionHistory />);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Search by order ID or item...")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("Terminal")).toBeInTheDocument();
+    });
+  });
+
+  it("shows empty state when no transactions", async () => {
+    vi.mocked(api.get).mockResolvedValue([]);
+    render(<TransactionHistory />);
+    await waitFor(() => {
+      expect(screen.getByText("No transactions found")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("DailyOverview", () => {
+  it("shows summary cards and breakdown", async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      date: "2026-05-13",
+      orderCount: 47,
+      cancelledCount: 2,
+      totalGross: 873.50,
+      totalVat: 112.30,
+      totalNet: 761.20,
+      vatByGroup: { "g1": { rate: 19, gross: 500, vat: 79.83 } },
+      byTerminal: { "Bar": { orderCount: 30, total: 500 } },
+      topItems: [{ itemId: "i1", name: "Espresso", count: 45 }],
+    });
+
+    render(<DailyOverview />);
+    await waitFor(() => {
+      expect(screen.getByText("47")).toBeInTheDocument();
+      expect(screen.getByText("873.50€")).toBeInTheDocument();
+      expect(screen.getByText("Top Items")).toBeInTheDocument();
+      expect(screen.getByText(/Espresso/)).toBeInTheDocument();
+    });
+  });
+
+  it("shows cancelled order warning when count > 0", async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      date: "2026-05-13",
+      orderCount: 10,
+      cancelledCount: 3,
+      totalGross: 100,
+      totalVat: 10,
+      totalNet: 90,
+      vatByGroup: {},
+      byTerminal: {},
+      topItems: [],
+    });
+
+    render(<DailyOverview />);
+    await waitFor(() => {
+      expect(screen.getByText(/3 cancelled order/)).toBeInTheDocument();
+    });
+  });
+});
