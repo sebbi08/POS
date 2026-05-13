@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { config } from "./config";
+import { initEventStore } from "./eventstore/client";
 import { startProjections } from "./projections/runner";
 import { initCatalogProjections } from "./modules/catalog/catalog.projections";
 import { initAuthProjections } from "./modules/auth/auth.projections";
@@ -39,8 +40,10 @@ initTerminalProjections();
 initReportingProjections();
 initCompanyProjection();
 
-startProjections().then(() => {
-  app.listen(config.port, () => {
-    console.log(`POS backend running on http://localhost:${config.port}`);
+initEventStore().then(() => {
+  startProjections().then(() => {
+    app.listen(config.port, () => {
+      console.log(`POS backend running on http://localhost:${config.port}`);
+    });
   });
 });

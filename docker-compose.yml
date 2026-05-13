@@ -1,16 +1,13 @@
 services:
-  eventstore:
-    image: eventstore/eventstore:24.10.0-alpha-arm64v8
+  postgres:
+    image: postgres:17-alpine
     environment:
-      - EVENTSTORE_CLUSTER_SIZE=1
-      - EVENTSTORE_RUN_PROJECTIONS=All
-      - EVENTSTORE_START_STANDARD_PROJECTIONS=true
-      - EVENTSTORE_INSECURE=true
-      - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
+      - POSTGRES_USER=pos
+      - POSTGRES_PASSWORD=pos
+      - POSTGRES_DB=pos
     ports:
-      - "2113:2113"
-      - "2114:2114"
+      - "5432:5432"
     volumes:
-      - eventstore-data:/var/lib/eventstore
+      - pg-data:/var/lib/postgresql/data
 volumes:
-  eventstore-data:
+  pg-data:

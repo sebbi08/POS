@@ -1,4 +1,4 @@
-import { getClient } from "../eventstore/client";
+import { replayAll, subscribeToAll } from "../eventstore/client";
 
 type EventHandler = (
   event: { type: string; data: Record<string, unknown> },
@@ -22,26 +22,33 @@ export function registerProjection(
 }
 
 export async function startProjections(): Promise<void> {
-  const client = getClient();
-
-  for (const sub of subscriptions) {
-    // Subscribe to all events, filter by prefix
-    const subscription = client.subscribeToAll({ fromPosition: "start" });
-
-    (async () => {
-      for await (const resolved of subscription) {
-        const e = resolved.event;
-        if (e && e.streamId.startsWith(`${sub.prefix}-`)) {
-          await sub.handler(
-            { type: e.type, data: e.data as Record<string, unknown> },
-            e.streamId
-          );
-        }
-      }
-    })();
+  if (subscriptions.length === 0) {
+    console.log("No projections registered.");
+    return;
   }
+
+  // Replay all existing events
+  console.log("Replaying existing events...");
+  await replayAll(async (event) => {
+    const { streamId } = event;
+    for (const sub of subscriptions) {
+      if (streamId.startsWith(`${sub.prefix}-`)) {
+        await sub.handler(event, streamId);
+      }
+    }
+  });
 
   console.log(
     `Projections started: ${subscriptions.map((s) => s.name).join(", ")}`
   );
+
+  // Subscribe to new events via LISTEN/NOTIFY
+  subscribeToAll((event) => {
+    const { streamId } = event;
+    for (const sub of subscriptions) {
+      if (streamId.startsWith(`${sub.prefix}-`)) {
+        sub.handler(event, streamId);
+      }
+    }
+  });
 }
