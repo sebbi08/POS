@@ -5,7 +5,7 @@ import { execSync } from "child_process";
 try {
   execSync(
     `docker compose exec -T postgres psql -U pos -c "CREATE DATABASE pos_e2e;"`,
-    { stdio: "ignore" }
+    { stdio: "ignore" },
   );
 } catch {
   // Database may already exist, that's fine
@@ -23,7 +23,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "cd backend && DATABASE_URL=postgresql://pos:pos@localhost:5432/pos_e2e ADMIN_PIN=0000 npx tsx src/index.ts",
+      command:
+        "cd backend && DATABASE_URL=postgresql://pos:pos@localhost:5432/pos_e2e ADMIN_PIN=0000 npx tsx src/index.ts",
       port: 3001,
       timeout: 15000,
       reuseExistingServer: false,

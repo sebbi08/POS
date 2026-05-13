@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "./api/client";
 import Login from "./views/Login";
 import POSLayout from "./views/POSLayout";
@@ -17,20 +17,23 @@ function App() {
     return null;
   });
 
+  useEffect(() => {
+    if (session) {
+      localStorage.setItem("pos-session", JSON.stringify(session));
+    } else {
+      localStorage.removeItem("pos-session");
+    }
+  }, [session]);
+
   const handleEnterPOS = (terminalId: string, terminalName: string) => {
-    const s: Session = { type: "pos", terminalId, terminalName };
-    localStorage.setItem("pos-session", JSON.stringify(s));
-    setSession(s);
+    setSession({ type: "pos", terminalId, terminalName });
   };
 
   const handleEnterAdmin = () => {
-    const s: Session = { type: "admin" };
-    localStorage.setItem("pos-session", JSON.stringify(s));
-    setSession(s);
+    setSession({ type: "admin" });
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("pos-session");
     api.clearAdminPin();
     setSession(null);
   };
@@ -42,29 +45,17 @@ function App() {
   return (
     <Routes>
       <Route
-        path="/pos/*"
+        path="/pos"
         element={
           session.type === "pos" ? (
             <POSLayout session={session} onLogout={handleLogout} />
           ) : (
-            <Navigate to="/admin" />
+            <Navigate to="/admin" replace />
           )
         }
       />
-      <Route
-        path="/admin/*"
-        element={
-          session.type === "admin" ? (
-            <AdminLayout onLogout={handleLogout} />
-          ) : (
-            <Navigate to="/pos" />
-          )
-        }
-      />
-      <Route
-        path="*"
-        element={<Navigate to={session.type === "admin" ? "/admin" : "/pos"} />}
-      />
+      <Route path="/admin" element={<AdminLayout onLogout={handleLogout} />} />
+      <Route path="*" element={<Navigate to={session.type === "admin" ? "/admin" : "/pos"} replace />} />
     </Routes>
   );
 }
