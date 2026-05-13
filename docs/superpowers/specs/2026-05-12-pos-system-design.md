@@ -5,7 +5,7 @@
 
 ## Overview
 
-A multi-user, event-sourced Point of Sale (POS) system for restaurant/cafe use. Multiple terminals with different item sets operate in separate sessions. All state changes are immutable events stored in EventStoreDB. The system has an admin panel for configuration and a POS terminal for order taking.
+A multi-user, event-sourced Point of Sale (POS) system for restaurant/cafe use. Multiple terminals with different item sets operate in separate sessions. All state changes are immutable events stored in PostgreSQL (events table + LISTEN/NOTIFY for real-time projections). The system has an admin panel for configuration and a POS terminal for order taking.
 
 ---
 
@@ -15,7 +15,7 @@ A multi-user, event-sourced Point of Sale (POS) system for restaurant/cafe use. 
 |-------|-----------|
 | Backend | Node.js + TypeScript + Express |
 | Frontend | React + Tailwind CSS (single SPA with role-based routing) |
-| Event Store | EventStoreDB |
+| Event Store | PostgreSQL (events table + LISTEN/NOTIFY) |
 | Receipt Printing | ESC/POS via WebUSB (browser) + PDF archive (server) |
 | PDF Generation | pdfmake or jspdf |
 
@@ -30,7 +30,7 @@ A single Node.js backend with clear module boundaries. Each module owns its stre
 | Module | Responsibility |
 |--------|---------------|
 | `catalog` | CRUD for item groups & items → writes events. Catalog projections. |
-| `auth` | PIN validation, session create/end, role-based access middleware |
+| `auth` | Admin PIN validation (stateless, no user management) |
 | `orders` | Order lifecycle (open → add items → pay/close/cancel). Order projections. |
 | `receipts` | Receive print notifications from client, generate PDF copy, write print events |
 | `terminals` | Terminal config, item set assignment via group filtering |
@@ -240,25 +240,34 @@ chrome --kiosk --kiosk-printing --enable-features=WebUsb \
 
 ## 8. Authentication & Sessions
 
-### 8.1 PIN Auth
-- Users have a 4-6 digit PIN
-- Login at `/login` with PIN
-- Session created (`SessionStarted` event) → valid until logout (`SessionEnded`) or timeout
-- Role-based routing: terminal users go to `/pos`, admins to `/admin`
+### 8.1 Model
+- **No terminal users** — terminals are selected directly from the start page
+- **Admin PIN** — a single configurable PIN (`ADMIN_PIN` env var, default `0000`) grants admin access
+- **Reverse proxy** handles external access control (basic auth, IP whitelist, etc.). The app itself has no user accounts.
 
-### 8.2 Roles
-- **Admin:** Full access to admin panel, can cancel any order
-- **Terminal:** POS terminal only, can cancel their current/last order (with admin PIN override)
+### 8.2 Start Page
+- Terminal grid: all non-archived terminals listed as buttons. Click to enter POS mode.
+- "Admin Panel" button hidden at bottom — opens PIN pad for admin login.
+- Admin PIN validated against `config.adminPin` on `POST /api/auth/login`, which returns `{ role: "admin", pin }`.
 
-### 8.3 Multi-Session
-- Multiple terminal sessions run simultaneously (different browser tabs/machines)
-- Each terminal has its own item set based on assigned groups
-- Sessions are isolated — each terminal sees its own open orders
-- Admin can see all terminals' activity
+### 8.3 Backend Auth
+- **Admin-only endpoints** (catalog, reporting, company config, terminal CRUD): require `x-admin-pin` header matching `config.adminPin`.
+- **Public endpoints** (terminal list, terminal items, orders): no auth required.
+- No sessions, no JWT, no token management. Stateless.
+
+### 8.4 Multi-Session
+- Multiple browser tabs/machines can select different terminals simultaneously.
+- Each terminal has its own item set based on assigned groups.
+- Each terminal's open orders are isolated (queried by `terminalId`).
+- Admin can see all terminals' activity.
+
+### 8.5 Configuration
+- `ADMIN_PIN` env var (default `"0000"`) — change in production via reverse proxy or `.env`.
+- Reverse proxy (nginx, Caddy, etc.) should handle external access control (basic auth, IP restrictions).
 
 ---
 
-## 9. Project Structure (Proposed)
+## 9. Project Structure (Current)
 
 ```
 pos/
@@ -266,33 +275,38 @@ pos/
 │   ├── src/
 │   │   ├── modules/
 │   │   │   ├── catalog/       # item groups, items
-│   │   │   ├── auth/          # users, sessions
+│   │   │   ├── auth/          # admin PIN check (stub)
 │   │   │   ├── orders/        # order lifecycle
 │   │   │   ├── receipts/      # PDF generation, print events
 │   │   │   ├── terminals/     # terminal config
 │   │   │   ├── reporting/     # daily overview, transactions
 │   │   │   └── company/       # company settings
-│   │   ├── eventstore/        # ESDB client, subscription management
-│   │   ├── projections/       # projection rebuild, catch-up logic
-│   │   └── api/               # Express routes, middleware
+│   │   ├── eventstore/        # PostgreSQL client, NOTIFY subscriptions
+│   │   ├── projections/       # replay + LISTEN/NOTIFY runner
+│   │   └── api/               # Express routes, checkAdmin middleware
 │   ├── package.json
 │   └── tsconfig.json
 ├── frontend/
 │   ├── src/
 │   │   ├── views/
-│   │   │   ├── Login.tsx
-│   │   │   ├── POSTerminal.tsx
-│   │   │   └── AdminPanel.tsx
+│   │   │   ├── Login.tsx       # terminal selection + admin PIN
+│   │   │   ├── POSLayout.tsx   # POS terminal view
+│   │   │   └── AdminLayout.tsx # admin panel
 │   │   ├── components/
 │   │   │   ├── ItemGrid.tsx
 │   │   │   ├── OrderPanel.tsx
-│   │   │   ├── ReceiptPreview.tsx
-│   │   │   └── ...
-│   │   └── hooks/
+│   │   │   ├── CatalogManager.tsx
+│   │   │   ├── CompanySettings.tsx
+│   │   │   ├── TerminalConfig.tsx
+│   │   │   ├── DailyOverview.tsx
+│   │   │   └── TransactionHistory.tsx
+│   │   └── api/
+│   │       └── client.ts       # fetch wrapper, admin pin injection
 │   ├── package.json
 │   └── tsconfig.json
-├── docker-compose.yml         # EventStoreDB instance
-└── README.md
+├── docker-compose.yml          # PostgreSQL
+├── start.sh
+└── docs/
 ```
 
 ---
