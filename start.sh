@@ -16,7 +16,7 @@ cd backend && npm run dev &
 BACKEND_PID=$!
 
 echo "Starting frontend..."
-cd ../frontend && npm run dev &
+cd frontend && npm run dev &
 FRONTEND_PID=$!
 
 echo ""

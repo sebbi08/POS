@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { config } from "./config";
-import { initEventStore } from "./eventstore/client";
+import { initEventStore, getPool } from "./eventstore/client";
 import { startProjections } from "./projections/runner";
 import { initCatalogProjections } from "./modules/catalog/catalog.projections";
 import { initAuthProjections } from "./modules/auth/auth.projections";
@@ -9,6 +9,7 @@ import { initOrderProjections } from "./modules/orders/orders.projections";
 import { initTerminalProjections } from "./modules/terminals/terminals.projections";
 import { initReportingProjections } from "./modules/reporting/reporting.projections";
 import { initCompanyProjection } from "./modules/company/company.projections";
+import { createUser } from "./modules/auth/auth.commands";
 
 import authRoutes from "./api/routes/auth.routes";
 import catalogRoutes from "./api/routes/catalog.routes";
@@ -40,7 +41,16 @@ initTerminalProjections();
 initReportingProjections();
 initCompanyProjection();
 
-initEventStore().then(() => {
+initEventStore().then(async () => {
+  // Seed default admin before replay so the projection catches it
+  const { rows } = await getPool().query(
+    `SELECT COUNT(*) as count FROM events WHERE stream_id LIKE 'auth-%' AND event_type = 'UserCreated'`
+  );
+  if (parseInt(rows[0].count) === 0) {
+    await createUser(config.seedAdmin.name, config.seedAdmin.pin, "admin");
+    console.log(`Seeded admin user: ${config.seedAdmin.name} (PIN: ${config.seedAdmin.pin})`);
+  }
+
   startProjections().then(() => {
     app.listen(config.port, () => {
       console.log(`POS backend running on http://localhost:${config.port}`);
