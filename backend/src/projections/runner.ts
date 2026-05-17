@@ -1,4 +1,4 @@
-import { replayAll, subscribeToAll } from "../eventstore/client";
+import { replayOrderEvents, subscribeToOrderEvents } from "../modules/orders/order-eventstore";
 
 type EventHandler = (
   event: { type: string; data: Record<string, unknown> },
@@ -27,9 +27,8 @@ export async function startProjections(): Promise<void> {
     return;
   }
 
-  // Replay all existing events
-  console.log("Replaying existing events...");
-  await replayAll(async (event) => {
+  console.log("Replaying order events...");
+  await replayOrderEvents(async (event) => {
     const { streamId } = event;
     for (const sub of subscriptions) {
       if (streamId.startsWith(`${sub.prefix}-`)) {
@@ -42,8 +41,7 @@ export async function startProjections(): Promise<void> {
     `Projections started: ${subscriptions.map((s) => s.name).join(", ")}`
   );
 
-  // Subscribe to new events via LISTEN/NOTIFY
-  subscribeToAll((event) => {
+  subscribeToOrderEvents((event) => {
     const { streamId } = event;
     for (const sub of subscriptions) {
       if (streamId.startsWith(`${sub.prefix}-`)) {
