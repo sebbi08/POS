@@ -108,7 +108,7 @@ export async function cancelOrder(
   const id = uuid();
   const title = reason || `Cancellation of order #${originalOrderId}`;
 
-  const items = original.items.map((item) => ({
+  const items = original.items.map((item: { itemId: string; name: string; qty: number; unitPrice: number; vatRate: number; vatAmount: number; total: number }) => ({
     ...item,
     qty: -item.qty,
     total: -item.total,

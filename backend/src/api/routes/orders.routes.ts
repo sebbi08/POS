@@ -29,7 +29,7 @@ router.post("/open", (req: Request, res: Response): void => {
   openOrder(terminalId).then((id) => res.json({ id }));
 });
 
-router.post("/:id/items", async (req: Request, res: Response): void => {
+router.post("/:id/items", async (req: Request, res: Response): Promise<void> => {
   const { itemId, qty } = req.body;
   try {
     const item = await getItem(itemId);
