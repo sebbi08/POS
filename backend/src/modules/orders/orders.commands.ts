@@ -1,7 +1,5 @@
 import { v4 as uuid } from "uuid";
-import { appendEvent } from "../../eventstore/client";
-import { groups } from "../catalog/catalog.projections";
-import { items } from "../catalog/catalog.projections";
+import { appendOrderEvent } from "./order-eventstore";
 import {
   OrderOpenedEvent,
   ItemAddedEvent,
@@ -10,45 +8,40 @@ import {
   FinalReceiptPrintedEvent,
   OrderPaidEvent,
   OrderClosedEvent,
-  OrderCancelledEvent,
+  OrderCancellationCreatedEvent,
 } from "./orders.types";
 
 const STREAM = (id: string) => `order-${id}`;
 
-export async function openOrder(
-  terminalId: string,
-  userId: string
-): Promise<string> {
+export async function openOrder(terminalId: string): Promise<string> {
   const id = uuid();
-  const data: OrderOpenedEvent = { id, terminalId, userId };
-  await appendEvent(STREAM(id), "OrderOpened", data as unknown as Record<string, unknown>);
+  const data: OrderOpenedEvent = { id, terminalId };
+  await appendOrderEvent(STREAM(id), "OrderOpened", data as unknown as Record<string, unknown>);
   return id;
 }
 
 export async function addItemToOrder(
   orderId: string,
   itemId: string,
-  qty: number
+  name: string,
+  qty: number,
+  unitPrice: number,
+  vatRate: number
 ): Promise<void> {
-  const item = items.get(itemId);
-  if (!item || item.archived) throw new Error(`Item ${itemId} not found`);
-
-  const group = groups.get(item.groupId);
-  const vatRate = group ? group.vatRate : 0;
-  const total = item.price * qty;
+  const total = unitPrice * qty;
   const vatAmount = total - total / (1 + vatRate / 100);
 
   const data: ItemAddedEvent = {
     orderId,
     itemId,
-    name: item.name,
+    name,
     qty,
-    unitPrice: item.price,
+    unitPrice,
     vatRate,
     vatAmount: Math.round(vatAmount * 100) / 100,
     total: Math.round(total * 100) / 100,
   };
-  await appendEvent(STREAM(orderId), "ItemAdded", data as unknown as Record<string, unknown>);
+  await appendOrderEvent(STREAM(orderId), "ItemAdded", data as unknown as Record<string, unknown>);
 }
 
 export async function removeItemFromOrder(
@@ -56,7 +49,7 @@ export async function removeItemFromOrder(
   itemId: string
 ): Promise<void> {
   const data: ItemRemovedEvent = { orderId, itemId };
-  await appendEvent(STREAM(orderId), "ItemRemoved", data as unknown as Record<string, unknown>);
+  await appendOrderEvent(STREAM(orderId), "ItemRemoved", data as unknown as Record<string, unknown>);
 }
 
 export async function printPickupReceipt(
@@ -64,12 +57,12 @@ export async function printPickupReceipt(
   itemId: string
 ): Promise<void> {
   const data: PickupReceiptPrintedEvent = { orderId, itemId };
-  await appendEvent(STREAM(orderId), "PickupReceiptPrinted", data as unknown as Record<string, unknown>);
+  await appendOrderEvent(STREAM(orderId), "PickupReceiptPrinted", data as unknown as Record<string, unknown>);
 }
 
 export async function printFinalReceipt(orderId: string): Promise<void> {
   const data: FinalReceiptPrintedEvent = { orderId };
-  await appendEvent(STREAM(orderId), "FinalReceiptPrinted", data as unknown as Record<string, unknown>);
+  await appendOrderEvent(STREAM(orderId), "FinalReceiptPrinted", data as unknown as Record<string, unknown>);
 }
 
 export async function payOrder(orderId: string): Promise<void> {
@@ -93,19 +86,56 @@ export async function payOrder(orderId: string): Promise<void> {
     ),
     totalNet: Math.round(totalNet * 100) / 100,
   };
-  await appendEvent(STREAM(orderId), "OrderPaid", data as unknown as Record<string, unknown>);
+  await appendOrderEvent(STREAM(orderId), "OrderPaid", data as unknown as Record<string, unknown>);
 }
 
 export async function closeOrder(orderId: string): Promise<void> {
   const data: OrderClosedEvent = { orderId };
-  await appendEvent(STREAM(orderId), "OrderClosed", data as unknown as Record<string, unknown>);
+  await appendOrderEvent(STREAM(orderId), "OrderClosed", data as unknown as Record<string, unknown>);
 }
 
 export async function cancelOrder(
-  orderId: string,
-  reason: string,
-  userId: string
-): Promise<void> {
-  const data: OrderCancelledEvent = { orderId, reason, userId };
-  await appendEvent(STREAM(orderId), "OrderCancelled", data as unknown as Record<string, unknown>);
+  originalOrderId: string,
+  terminalId: string,
+  reason?: string
+): Promise<string> {
+  const { orders } = require("./orders.projections");
+  const original = orders.get(originalOrderId);
+  if (!original) throw new Error(`Order ${originalOrderId} not found`);
+  if (original.status !== "closed") throw new Error(`Only closed orders can be cancelled`);
+  if (original.cancelledByOrderId) throw new Error(`Order already cancelled`);
+
+  const id = uuid();
+  const title = reason || `Cancellation of order #${originalOrderId}`;
+
+  const items = original.items.map((item) => ({
+    ...item,
+    qty: -item.qty,
+    total: -item.total,
+    vatAmount: -item.vatAmount,
+  }));
+
+  const totalGross = -original.totalGross;
+  const totalNet = -original.totalNet;
+  const totalVat: Record<number, number> = {};
+  for (const [rate, amount] of Object.entries(original.totalVat)) {
+    totalVat[Number(rate)] = -(amount as number);
+  }
+
+  const now = new Date().toISOString();
+
+  const data: OrderCancellationCreatedEvent = {
+    id,
+    terminalId,
+    title,
+    cancelsOrderId: originalOrderId,
+    items,
+    totalGross,
+    totalVat,
+    totalNet,
+    createdAt: now,
+    closedAt: now,
+  };
+  await appendOrderEvent(STREAM(id), "OrderCancellationCreated", data as unknown as Record<string, unknown>);
+  return id;
 }
