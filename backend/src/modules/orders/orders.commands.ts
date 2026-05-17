@@ -102,8 +102,16 @@ export async function cancelOrder(
   const { orders } = require("./orders.projections");
   const original = orders.get(originalOrderId);
   if (!original) throw new Error(`Order ${originalOrderId} not found`);
-  if (original.status !== "closed") throw new Error(`Only closed orders can be cancelled`);
   if (original.cancelledByOrderId) throw new Error(`Order already cancelled`);
+
+  // Open orders: just close them (discard, no financial record needed)
+  if (original.status === "open") {
+    await closeOrder(originalOrderId);
+    return "";
+  }
+
+  // Closed orders: create a separate cancellation order with negated values
+  if (original.status !== "closed") throw new Error(`Only open or closed orders can be cancelled`);
 
   const id = uuid();
   const title = reason || `Cancellation of order #${originalOrderId}`;
