@@ -2,7 +2,7 @@ import PdfPrinter from "pdfmake";
 import fs from "fs";
 import path from "path";
 import { config } from "../../config";
-import { companySettings } from "../company/company.projections";
+import { getCompanySettings } from "../company/company.repository";
 import { orders } from "../orders/orders.projections";
 
 const fonts = {
@@ -21,6 +21,8 @@ export async function generatePickupReceiptPdf(
 ): Promise<string> {
   const order = orders.get(orderId);
   if (!order) throw new Error(`Order ${orderId} not found`);
+
+  const companySettings = await getCompanySettings();
 
   const item = order.items.find((i) => i.itemId === itemId);
   if (!item) throw new Error(`Item ${itemId} not found in order`);
@@ -68,6 +70,8 @@ export async function generateFinalReceiptPdf(
 ): Promise<string> {
   const order = orders.get(orderId);
   if (!order) throw new Error(`Order ${orderId} not found`);
+
+  const companySettings = await getCompanySettings();
 
   const now = new Date().toLocaleString("de-DE");
 
