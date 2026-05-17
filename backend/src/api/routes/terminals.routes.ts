@@ -1,24 +1,23 @@
 import { Router, Request, Response } from "express";
 import { checkAdmin } from "../middleware/auth.middleware";
 import {
+  listTerminals,
   createTerminal,
   updateTerminal,
-  archiveTerminal,
-} from "../../modules/terminals/terminals.commands";
-import { terminals, getTerminalItems } from "../../modules/terminals/terminals.projections";
+  deleteTerminal,
+  getTerminalItems,
+} from "../../modules/terminals/terminals.repository";
 
 const router = Router();
 
-// Public: list active (non-archived) terminals
 router.get("/", (_req: Request, res: Response): void => {
-  res.json(
-    Array.from(terminals.values())
-      .filter((t) => !t.archived)
-      .map(({ id, name, groupIds }) => ({ id, name, groupIds }))
+  listTerminals().then((terminals) =>
+    res.json(
+      terminals.map(({ id, name, groupIds }) => ({ id, name, groupIds }))
+    )
   );
 });
 
-// Admin-only mutations
 router.post("/", checkAdmin, (req: Request, res: Response): void => {
   const { name, groupIds, printerVendorId, printerProductId } = req.body;
   createTerminal(name, groupIds, printerVendorId, printerProductId).then((id) =>
@@ -34,14 +33,13 @@ router.put("/:id", checkAdmin, (req: Request, res: Response): void => {
 });
 
 router.delete("/:id", checkAdmin, (req: Request, res: Response): void => {
-  archiveTerminal(req.params.id).then(() =>
-    res.json({ status: "archived" })
+  deleteTerminal(req.params.id).then(() =>
+    res.json({ status: "deleted" })
   );
 });
 
-// Public: get items for a terminal
 router.get("/:id/items", (req: Request, res: Response): void => {
-  res.json(getTerminalItems(req.params.id));
+  getTerminalItems(req.params.id).then((items) => res.json(items));
 });
 
 export default router;
