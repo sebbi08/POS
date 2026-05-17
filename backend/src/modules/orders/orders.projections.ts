@@ -11,7 +11,6 @@ export function initOrderProjections(): void {
         orders.set(data.id as string, {
           id: data.id as string,
           terminalId: data.terminalId as string,
-          userId: data.userId as string,
           status: "open",
           items: [],
           pickupSeq: 0,
@@ -81,13 +80,34 @@ export function initOrderProjections(): void {
         }
         break;
       }
-      case "OrderCancelled": {
+      case "OrderCancellationCreated": {
         const data = event.data;
-        const order = orders.get(data.orderId as string);
-        if (order) {
-          order.status = "cancelled" as OrderStatus;
-          order.closedAt = new Date();
-          order.cancelledReason = data.reason as string;
+        const order: Order = {
+          id: data.id as string,
+          terminalId: data.terminalId as string,
+          status: "closed",
+          items: (data.items as OrderItem[]).map((i) => ({
+            ...i,
+            qty: Number(i.qty),
+            unitPrice: Number(i.unitPrice),
+            vatRate: Number(i.vatRate),
+            vatAmount: Number(i.vatAmount),
+            total: Number(i.total),
+          })),
+          pickupSeq: 0,
+          totalGross: data.totalGross as number,
+          totalVat: data.totalVat as Record<number, number>,
+          totalNet: data.totalNet as number,
+          createdAt: new Date(data.createdAt as string),
+          closedAt: new Date(data.closedAt as string),
+          title: data.title as string,
+          cancelsOrderId: data.cancelsOrderId as string,
+        };
+        orders.set(order.id, order);
+
+        const original = orders.get(data.cancelsOrderId as string);
+        if (original) {
+          original.cancelledByOrderId = data.id as string;
         }
         break;
       }
@@ -103,23 +123,4 @@ export function getOpenOrdersByTerminal(terminalId: string): Order[] {
     }
   }
   return result;
-}
-
-export function getLastClosedOrder(
-  terminalId: string,
-  userId: string
-): Order | null {
-  let last: Order | null = null;
-  for (const order of orders.values()) {
-    if (
-      order.terminalId === terminalId &&
-      order.userId === userId &&
-      (order.status === "closed" || order.status === "cancelled")
-    ) {
-      if (!last || (order.closedAt && last.closedAt && order.closedAt > last.closedAt)) {
-        last = order;
-      }
-    }
-  }
-  return last;
 }
