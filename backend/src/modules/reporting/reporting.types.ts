@@ -13,13 +13,12 @@ export interface DailyReport {
 export interface TransactionRecord {
   orderId: string;
   terminalId: string;
-  userId: string;
-  userName: string;
   items: string;
   itemCount: number;
   totalGross: number;
   totalVat: number;
   status: string;
-  reason?: string;
+  title?: string;
+  cancelsOrderId?: string;
   closedAt: string;
 }
