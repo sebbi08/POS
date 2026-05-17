@@ -22,10 +22,13 @@ export function initReportingProjections(): void {
     switch (event.type) {
       case "OrderClosed": {
         const orderId = event.data.orderId as string;
-        const existing = transactionHistory.find((t) => t.orderId === orderId);
-        if (existing) {
-          existing.status = "closed";
-          existing.closedAt = new Date().toISOString();
+        const order = ordersMap.get(orderId);
+        if (order && !order.cancelsOrderId) {
+          const existingIdx = transactionHistory.findIndex((t) => t.orderId === orderId);
+          if (existingIdx >= 0) {
+            transactionHistory[existingIdx].status = "closed";
+            transactionHistory[existingIdx].closedAt = new Date().toISOString();
+          }
           dailyReport.orderCount++;
         }
         break;
@@ -36,40 +39,53 @@ export function initReportingProjections(): void {
         const order = ordersMap.get(orderId);
 
         if (order) {
-          const userName = order.terminalId;
-
           const itemsText = order.items
             .map((i: { qty: number; name: string }) => `${i.qty}x ${i.name}`)
             .join(", ");
 
+          const totalVat = Object.values(
+            data.totalVat as Record<number, number>
+          ).reduce((a: number, b: number) => a + b, 0);
+
           transactionHistory.push({
             orderId,
             terminalId: order.terminalId,
-            userId: order.userId,
-            userName,
             items: itemsText,
             itemCount: order.items.length,
             totalGross: data.totalGross as number,
-            totalVat: Object.values(
-              data.totalVat as Record<number, number>
-            ).reduce((a: number, b: number) => a + b, 0),
+            totalVat,
             status: "paid",
             closedAt: new Date().toISOString(),
           });
         }
         break;
       }
-      case "OrderCancelled": {
+      case "OrderCancellationCreated": {
         const data = event.data;
-        const orderId = data.orderId as string;
+        const id = data.id as string;
+        const cancelsOrderId = data.cancelsOrderId as string;
+        const order = ordersMap.get(id);
 
-        const existing = transactionHistory.find((t) => t.orderId === orderId);
-        if (existing) {
-          existing.status = "cancelled";
-          existing.reason = data.reason as string;
-          existing.closedAt = new Date().toISOString();
+        if (order) {
+          const itemsText = order.items
+            .map((i: { qty: number; name: string }) => `${i.qty}x ${i.name}`)
+            .join(", ");
+
+          transactionHistory.push({
+            orderId: id,
+            terminalId: order.terminalId,
+            items: itemsText,
+            itemCount: order.items.length,
+            totalGross: order.totalGross,
+            totalVat: Object.values(order.totalVat).reduce((a: number, b: number) => a + b, 0),
+            status: "cancelled",
+            title: data.title as string,
+            cancelsOrderId,
+            closedAt: new Date().toISOString(),
+          });
+
+          dailyReport.cancelledCount++;
         }
-        dailyReport.cancelledCount++;
         break;
       }
       case "ItemAdded": {
