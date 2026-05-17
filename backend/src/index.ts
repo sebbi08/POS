@@ -1,14 +1,11 @@
 import express from "express";
 import cors from "cors";
 import { config } from "./config";
-import { initEventStore } from "./eventstore/client";
+import { initTables } from "./db";
 import { startProjections } from "./projections/runner";
-import { initCatalogProjections } from "./modules/catalog/catalog.projections";
 import { initAuthProjections } from "./modules/auth/auth.projections";
 import { initOrderProjections } from "./modules/orders/orders.projections";
-import { initTerminalProjections } from "./modules/terminals/terminals.projections";
 import { initReportingProjections } from "./modules/reporting/reporting.projections";
-import { initCompanyProjection } from "./modules/company/company.projections";
 
 import authRoutes from "./api/routes/auth.routes";
 import catalogRoutes from "./api/routes/catalog.routes";
@@ -32,15 +29,11 @@ app.use("/api/terminals", terminalsRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api/company", companyRoutes);
 
-// Initialize projections
-initCatalogProjections();
 initAuthProjections();
 initOrderProjections();
-initTerminalProjections();
 initReportingProjections();
-initCompanyProjection();
 
-initEventStore().then(() => {
+initTables().then(() => {
   startProjections().then(() => {
     app.listen(config.port, () => {
       console.log(`POS backend running on http://localhost:${config.port}`);
