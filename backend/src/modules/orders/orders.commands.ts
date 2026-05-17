@@ -4,7 +4,6 @@ import {
   OrderOpenedEvent,
   ItemAddedEvent,
   ItemRemovedEvent,
-  PickupReceiptPrintedEvent,
   FinalReceiptPrintedEvent,
   OrderPaidEvent,
   OrderClosedEvent,
@@ -50,14 +49,6 @@ export async function removeItemFromOrder(
 ): Promise<void> {
   const data: ItemRemovedEvent = { orderId, itemId };
   await appendOrderEvent(STREAM(orderId), "ItemRemoved", data as unknown as Record<string, unknown>);
-}
-
-export async function printPickupReceipt(
-  orderId: string,
-  itemId: string
-): Promise<void> {
-  const data: PickupReceiptPrintedEvent = { orderId, itemId };
-  await appendOrderEvent(STREAM(orderId), "PickupReceiptPrinted", data as unknown as Record<string, unknown>);
 }
 
 export async function printFinalReceipt(orderId: string): Promise<void> {

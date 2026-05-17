@@ -36,10 +36,13 @@ app.use(express.json());
 import authRoutes from "../api/routes/auth.routes";
 import terminalsRoutes from "../api/routes/terminals.routes";
 import companyRoutes from "../api/routes/company.routes";
+import orderRoutes from "../api/routes/orders.routes";
+import { orders as orderProjections } from "../modules/orders/orders.projections";
 
 app.use("/api/auth", authRoutes);
 app.use("/api/terminals", terminalsRoutes);
 app.use("/api/company", companyRoutes);
+app.use("/api/orders", orderRoutes);
 
 describe("Auth Routes", () => {
   it("POST /api/auth/login with correct PIN returns admin role", async () => {
@@ -92,5 +95,76 @@ describe("Company Routes", () => {
   it("PUT /api/company without admin PIN returns 403", async () => {
     const res = await request(app).put("/api/company").send({ name: "Test" });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("Order Route Constraints", () => {
+  it("POST /api/orders/open rejects when terminal already has an open order", async () => {
+    orderProjections.clear();
+    orderProjections.set("existing-order", {
+      id: "existing-order",
+      terminalId: "t1",
+      status: "open",
+      items: [],
+      pickupSeq: 0,
+      totalGross: 0,
+      totalVat: {},
+      totalNet: 0,
+      createdAt: new Date(),
+    } as any);
+
+    const res = await request(app)
+      .post("/api/orders/open")
+      .send({ terminalId: "t1" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("already has an open order");
+    expect(res.body.orderId).toBe("existing-order");
+  });
+
+  it("POST /api/orders/open succeeds when terminal has no open order", async () => {
+    orderProjections.clear();
+
+    const res = await request(app)
+      .post("/api/orders/open")
+      .send({ terminalId: "t2" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBeTruthy();
+  });
+});
+
+describe("Terminal Delete Constraint", () => {
+  it("DELETE /api/terminals/:id rejects when terminal has open orders", async () => {
+    orderProjections.clear();
+    orderProjections.set("open-order", {
+      id: "open-order",
+      terminalId: "term-to-delete",
+      status: "open",
+      items: [],
+      pickupSeq: 0,
+      totalGross: 0,
+      totalVat: {},
+      totalNet: 0,
+      createdAt: new Date(),
+    } as any);
+
+    const res = await request(app)
+      .delete("/api/terminals/term-to-delete")
+      .set("x-admin-pin", "0000");
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("Cannot delete terminal with open orders");
+  });
+
+  it("DELETE /api/terminals/:id succeeds when terminal has no open orders", async () => {
+    orderProjections.clear();
+
+    const res = await request(app)
+      .delete("/api/terminals/some-terminal")
+      .set("x-admin-pin", "0000");
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("deleted");
   });
 });

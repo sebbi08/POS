@@ -61,13 +61,13 @@ test.describe("POS Terminal Flow", () => {
     await expect(page.getByRole("button", { name: terminalName })).toBeVisible({ timeout: 5000 });
     await page.getByRole("button", { name: terminalName }).click();
 
-    await expect(page.getByRole("button", { name: "New Order" })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText("No open order")).toBeVisible();
+    await expect(page.getByText("No open order")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Espresso")).toBeVisible();
   });
 
   test("POS terminal shows assigned items", async ({ page }) => {
     await page.getByRole("button", { name: terminalName }).click();
-    await expect(page.getByRole("button", { name: "New Order" })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("No open order")).toBeVisible({ timeout: 5000 });
 
     await expect(page.getByText("Espresso")).toBeVisible();
     await expect(page.getByText("2.50€")).toBeVisible();
@@ -75,24 +75,24 @@ test.describe("POS Terminal Flow", () => {
     await expect(page.getByText("3.20€")).toBeVisible();
   });
 
-  test("complete order flow: new order → add items → pay & close", async ({ page }) => {
+  test("complete order flow: tap item → auto-creates order → add items → pay & close", async ({ page }) => {
     await page.getByRole("button", { name: terminalName }).click();
-    await expect(page.getByRole("button", { name: "New Order" })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("No open order")).toBeVisible({ timeout: 5000 });
 
-    await page.getByRole("button", { name: "New Order" }).click();
+    // Tapping an item auto-creates the order
+    await page.locator("button:has-text('Espresso')").first().click();
     await expect(page.getByText(/Order #/)).toBeVisible({ timeout: 5000 });
 
-    // Click Espresso (first button in the item grid, not order panel)
-    await page.locator("button:has-text('Espresso')").first().click();
     await page.locator("button:has-text('Cappuccino')").first().click();
     await page.locator("button:has-text('Espresso')").first().click(); // second espresso
 
-    await expect(page.getByText("2× 2.50€")).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText("1× 3.20€")).toBeVisible();
+    // Quantity shows 2 for Espresso (2 × 2.50€ = 5.00€)
+    await expect(page.getByText("× 2.50€")).toHaveCount(2);
+    await expect(page.getByText("× 3.20€")).toHaveCount(1);
     await expect(page.getByText("8.20€")).toBeVisible();
 
-    // Print pickup receipt for espresso
-    await page.locator("button:has-text('Pickup')").first().click();
+    // Print combined receipt (final + pickups)
+    await page.getByRole("button", { name: "Print" }).click();
 
     // Pay and close
     await page.getByRole("button", { name: "Pay & Close" }).click();
@@ -102,20 +102,43 @@ test.describe("POS Terminal Flow", () => {
 
   test("cancel an open order", async ({ page }) => {
     await page.getByRole("button", { name: terminalName }).click();
-    await expect(page.getByRole("button", { name: "New Order" })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("No open order")).toBeVisible({ timeout: 5000 });
 
-    await page.getByRole("button", { name: "New Order" }).click();
+    // Tapping an item auto-creates the order
+    await page.locator("button:has-text('Espresso')").first().click();
     await expect(page.getByText(/Order #/)).toBeVisible({ timeout: 5000 });
 
-    await page.locator("button:has-text('Espresso')").first().click();
     await page.getByRole("button", { name: "Cancel" }).click();
 
     await expect(page.getByText("No open order")).toBeVisible({ timeout: 5000 });
   });
 
+  test("open order survives page reload", async ({ page }) => {
+    await page.getByRole("button", { name: terminalName }).click();
+    await expect(page.getByText("No open order")).toBeVisible({ timeout: 5000 });
+
+    // Start an order by tapping an item
+    await page.locator("button:has-text('Espresso')").first().click();
+    await expect(page.getByText(/Order #/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Espresso")).toHaveCount(2); // one in grid, one in order panel
+
+    // Reload the page
+    await page.reload();
+    await page.waitForTimeout(2000); // let projections catch up
+
+    // Select terminal again and verify order is still there
+    await page.getByRole("button", { name: terminalName }).click();
+    await expect(page.getByText(/Order #/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Espresso")).toHaveCount(2); // should still have item
+
+    // Pay and close
+    await page.getByRole("button", { name: "Pay & Close" }).click();
+    await expect(page.getByText("No open order")).toBeVisible({ timeout: 5000 });
+  });
+
   test("exit POS returns to start page", async ({ page }) => {
     await page.getByRole("button", { name: terminalName }).click();
-    await expect(page.getByRole("button", { name: "New Order" })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("No open order")).toBeVisible({ timeout: 5000 });
 
     await page.getByRole("button", { name: "Exit" }).click();
     await expect(page.getByText("POS System")).toBeVisible({ timeout: 5000 });

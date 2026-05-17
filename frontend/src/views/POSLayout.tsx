@@ -27,21 +27,49 @@ function POSLayout({ session, onLogout }: Props) {
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadItems = useCallback(() => {
-    api.get<TerminalItem[]>(`/terminals/${terminalId}/items`).then((data) => {
-      setItems(data);
-      setLoading(false);
-    });
+  const loadItems = useCallback(async () => {
+    const items = await api.get<TerminalItem[]>(`/terminals/${terminalId}/items`);
+    setItems(items);
+
+    const orders = await api.get<Order[]>(`/orders?terminalId=${terminalId}`);
+    const open = orders.find((o) => o.status === "open");
+    if (open) setCurrentOrder(open);
+
+    setLoading(false);
   }, [terminalId]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
 
-  const handleNewOrder = async () => {
-    const data = await api.post<{ id: string }>("/orders/open", { terminalId });
-    setCurrentOrder({ id: data.id, status: "open", items: [] });
+  const handleAddItem = async (itemId: string) => {
+    let order = currentOrder;
+    if (!order) {
+      try {
+        const data = await api.post<{ id: string }>("/orders/open", { terminalId });
+        order = { id: data.id, status: "open", items: [] };
+        setCurrentOrder(order);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("409")) {
+          const orders = await api.get<Order[]>(`/orders?terminalId=${terminalId}`);
+          const existing = orders.find((o) => o.status === "open");
+          if (existing) {
+            order = existing;
+            setCurrentOrder(order);
+          } else {
+            return;
+          }
+        } else {
+          return;
+        }
+      }
+    }
+    await api.post(`/orders/${order.id}/items`, { itemId, qty: 1 });
+    const orders = await api.get<Order[]>(`/orders?terminalId=${terminalId}`);
+    const updated = orders.find((o) => o.id === order!.id);
+    if (updated) setCurrentOrder(updated);
   };
 
-  const handleAddItem = async (itemId: string) => {
+  const handleIncreaseQty = async (itemId: string) => {
     if (!currentOrder) return;
     await api.post(`/orders/${currentOrder.id}/items`, { itemId, qty: 1 });
     const orders = await api.get<Order[]>(`/orders?terminalId=${terminalId}`);
@@ -49,14 +77,26 @@ function POSLayout({ session, onLogout }: Props) {
     if (updated) setCurrentOrder(updated);
   };
 
-  const handlePrintPickup = async (itemId: string) => {
+  const handleDecreaseQty = async (itemId: string) => {
     if (!currentOrder) return;
-    await api.post(`/orders/${currentOrder.id}/print-pickup`, { itemId });
+    await api.post(`/orders/${currentOrder.id}/items`, { itemId, qty: -1 });
+    const orders = await api.get<Order[]>(`/orders?terminalId=${terminalId}`);
+    const updated = orders.find((o) => o.id === currentOrder.id);
+    if (updated) setCurrentOrder(updated);
   };
 
-  const handlePrintFinal = async () => {
+  const handleRemoveItem = async (itemId: string) => {
     if (!currentOrder) return;
-    await api.post(`/orders/${currentOrder.id}/print-final`);
+    await api.delete(`/orders/${currentOrder.id}/items/${itemId}`);
+    const orders = await api.get<Order[]>(`/orders?terminalId=${terminalId}`);
+    const updated = orders.find((o) => o.id === currentOrder.id);
+    if (updated) setCurrentOrder(updated);
+    else setCurrentOrder(null);
+  };
+
+  const handlePrint = async () => {
+    if (!currentOrder) return;
+    await api.post(`/orders/${currentOrder.id}/print`);
   };
 
   const handlePayAndClose = async () => {
@@ -101,17 +141,17 @@ function POSLayout({ session, onLogout }: Props) {
           <ItemGrid
             items={items}
             onAddItem={handleAddItem}
-            onNewOrder={handleNewOrder}
-            hasOrder={!!currentOrder}
           />
         </div>
         <div className="flex-[2]">
           <OrderPanel
             order={currentOrder}
-            onPrintPickup={handlePrintPickup}
-            onPrintFinal={handlePrintFinal}
+            onPrint={handlePrint}
             onPayAndClose={handlePayAndClose}
             onCancel={handleCancel}
+            onIncreaseQty={handleIncreaseQty}
+            onDecreaseQty={handleDecreaseQty}
+            onRemoveItem={handleRemoveItem}
           />
         </div>
       </main>

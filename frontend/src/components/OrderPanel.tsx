@@ -14,23 +14,27 @@ interface Order {
 
 interface Props {
   order: Order | null;
-  onPrintPickup: (itemId: string) => void;
-  onPrintFinal: () => void;
+  onPrint: () => void;
   onPayAndClose: () => void;
   onCancel: () => void;
+  onIncreaseQty: (itemId: string) => void;
+  onDecreaseQty: (itemId: string) => void;
+  onRemoveItem: (itemId: string) => void;
 }
 
 function OrderPanel({
   order,
-  onPrintPickup,
-  onPrintFinal,
+  onPrint,
   onPayAndClose,
   onCancel,
+  onIncreaseQty,
+  onDecreaseQty,
+  onRemoveItem,
 }: Props) {
   if (!order) {
     return (
       <div className="h-full bg-gray-800 rounded-xl p-4 flex items-center justify-center text-gray-500">
-        No open order. Click "New Order" to start.
+        No open order. Tap an item to start.
       </div>
     );
   }
@@ -49,20 +53,38 @@ function OrderPanel({
             key={item.itemId}
             className="flex items-center justify-between bg-gray-700 rounded-lg p-3 mb-2"
           >
-            <div className="flex-1">
-              <div className="text-white font-medium">{item.name}</div>
-              <div className="text-gray-400 text-xs">
-                {item.qty}× {item.unitPrice.toFixed(2)}€
+            <div className="flex-1 min-w-0">
+              <div className="text-white font-medium truncate">{item.name}</div>
+              <div className="flex items-center gap-1 mt-1">
+                <button
+                  onClick={() => item.qty <= 1 ? onRemoveItem(item.itemId) : onDecreaseQty(item.itemId)}
+                  className="bg-gray-600 hover:bg-gray-500 text-white text-xs w-6 h-6 rounded flex items-center justify-center transition-colors"
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <span className="text-white text-sm font-bold w-6 text-center">{item.qty}</span>
+                <button
+                  onClick={() => onIncreaseQty(item.itemId)}
+                  className="bg-gray-600 hover:bg-gray-500 text-white text-xs w-6 h-6 rounded flex items-center justify-center transition-colors"
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+                <span className="text-gray-400 text-xs ml-1">
+                  × {item.unitPrice.toFixed(2)}€
+                </span>
               </div>
             </div>
-            <div className="text-white font-bold mr-3">
+            <div className="text-white font-bold mr-2">
               {item.total.toFixed(2)}€
             </div>
             <button
-              onClick={() => onPrintPickup(item.itemId)}
-              className="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-1 rounded border border-yellow-600"
+              onClick={() => onRemoveItem(item.itemId)}
+              className="text-red-400 hover:text-red-300 text-xs w-6 h-6 rounded flex items-center justify-center hover:bg-gray-600 transition-colors"
+              aria-label="Remove item"
             >
-              Pickup
+              ×
             </button>
           </div>
         ))}
@@ -82,11 +104,11 @@ function OrderPanel({
 
       <div className="grid grid-cols-2 gap-2">
         <button
-          onClick={onPrintFinal}
+          onClick={onPrint}
           disabled={order.items.length === 0}
           className="bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white rounded-lg py-3 text-sm font-semibold"
         >
-          Print Final
+          Print
         </button>
         <button
           onClick={onCancel}

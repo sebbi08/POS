@@ -3,14 +3,13 @@ import {
   openOrder,
   addItemToOrder,
   removeItemFromOrder,
-  printPickupReceipt,
   printFinalReceipt,
   payOrder,
   closeOrder,
   cancelOrder,
 } from "../../modules/orders/orders.commands";
-import { orders } from "../../modules/orders/orders.projections";
-import { generatePickupReceiptPdf, generateFinalReceiptPdf } from "../../modules/receipts/receipts.pdf";
+import { orders, getOpenOrdersByTerminal } from "../../modules/orders/orders.projections";
+import { generateCombinedReceiptPdf } from "../../modules/receipts/receipts.pdf";
 import { getItem } from "../../modules/catalog/catalog.repository";
 import { getGroup } from "../../modules/catalog/catalog.repository";
 
@@ -26,6 +25,13 @@ router.get("/", (req: Request, res: Response): void => {
 
 router.post("/open", (req: Request, res: Response): void => {
   const { terminalId } = req.body;
+
+  const openOrders = getOpenOrdersByTerminal(terminalId);
+  if (openOrders.length > 0) {
+    res.status(409).json({ error: "Terminal already has an open order", orderId: openOrders[0].id });
+    return;
+  }
+
   openOrder(terminalId).then((id) => res.json({ id }));
 });
 
@@ -53,18 +59,9 @@ router.delete("/:id/items/:itemId", (req: Request, res: Response): void => {
   );
 });
 
-router.post("/:id/print-pickup", (req: Request, res: Response): void => {
-  const { itemId } = req.body;
-  printPickupReceipt(req.params.id, itemId).then(() => {
-    const order = orders.get(req.params.id);
-    generatePickupReceiptPdf(req.params.id, itemId, order?.pickupSeq ?? 1);
-    res.json({ status: "printed" });
-  });
-});
-
-router.post("/:id/print-final", (req: Request, res: Response): void => {
+router.post("/:id/print", (req: Request, res: Response): void => {
   printFinalReceipt(req.params.id).then(() => {
-    generateFinalReceiptPdf(req.params.id);
+    generateCombinedReceiptPdf(req.params.id);
     res.json({ status: "printed" });
   });
 });

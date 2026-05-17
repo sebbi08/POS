@@ -7,6 +7,7 @@ import {
   deleteTerminal,
   getTerminalItems,
 } from "../../modules/terminals/terminals.repository";
+import { getOpenOrdersByTerminal } from "../../modules/orders/orders.projections";
 
 const router = Router();
 
@@ -33,6 +34,11 @@ router.put("/:id", checkAdmin, (req: Request, res: Response): void => {
 });
 
 router.delete("/:id", checkAdmin, (req: Request, res: Response): void => {
+  const openOrders = getOpenOrdersByTerminal(req.params.id);
+  if (openOrders.length > 0) {
+    res.status(409).json({ error: "Cannot delete terminal with open orders" });
+    return;
+  }
   deleteTerminal(req.params.id).then(() =>
     res.json({ status: "deleted" })
   );

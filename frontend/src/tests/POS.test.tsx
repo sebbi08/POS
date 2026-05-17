@@ -11,7 +11,7 @@ describe("ItemGrid", () => {
   ];
 
   it("renders all item buttons with name and price", () => {
-    render(<ItemGrid items={items} onAddItem={vi.fn()} onNewOrder={vi.fn()} hasOrder={false} />);
+    render(<ItemGrid items={items} onAddItem={vi.fn()} />);
     expect(screen.getByText("Espresso")).toBeInTheDocument();
     expect(screen.getByText("2.50€")).toBeInTheDocument();
     expect(screen.getByText("Cappuccino")).toBeInTheDocument();
@@ -19,37 +19,34 @@ describe("ItemGrid", () => {
   });
 
   it("shows empty state when no items assigned", () => {
-    render(<ItemGrid items={[]} onAddItem={vi.fn()} onNewOrder={vi.fn()} hasOrder={true} />);
+    render(<ItemGrid items={[]} onAddItem={vi.fn()} />);
     expect(screen.getByText("No items assigned to this terminal")).toBeInTheDocument();
   });
 
-  it("disables New Order button when order exists", () => {
-    render(<ItemGrid items={items} onAddItem={vi.fn()} onNewOrder={vi.fn()} hasOrder={true} />);
-    const btn = screen.getByText("Order in progress");
-    expect(btn).toBeDisabled();
-  });
-
-  it("calls onNewOrder when button clicked", () => {
-    const onNewOrder = vi.fn();
-    render(<ItemGrid items={items} onAddItem={vi.fn()} onNewOrder={onNewOrder} hasOrder={false} />);
-    fireEvent.click(screen.getByText("New Order"));
-    expect(onNewOrder).toHaveBeenCalled();
-  });
-
-  it("calls onAddItem when item clicked with active order", () => {
+  it("calls onAddItem when item clicked", () => {
     const onAddItem = vi.fn();
-    render(<ItemGrid items={items} onAddItem={onAddItem} onNewOrder={vi.fn()} hasOrder={true} />);
+    render(<ItemGrid items={items} onAddItem={onAddItem} />);
     fireEvent.click(screen.getByText("Espresso"));
     expect(onAddItem).toHaveBeenCalledWith("i1");
   });
 
-  it("disables item buttons when no order", () => {
-    render(<ItemGrid items={items} onAddItem={vi.fn()} onNewOrder={vi.fn()} hasOrder={false} />);
-    expect(screen.getByText("Espresso").closest("button")).toBeDisabled();
+  it("items are always enabled (no order needed)", () => {
+    render(<ItemGrid items={items} onAddItem={vi.fn()} />);
+    expect(screen.getByText("Espresso").closest("button")).not.toBeDisabled();
   });
 });
 
 describe("OrderPanel", () => {
+  const noop = vi.fn();
+  const emptyProps = {
+    onPrint: noop,
+    onPayAndClose: noop,
+    onCancel: noop,
+    onIncreaseQty: noop,
+    onDecreaseQty: noop,
+    onRemoveItem: noop,
+  };
+
   const order = {
     id: "12345678-1234-1234-1234-123456789abc",
     status: "open",
@@ -60,12 +57,12 @@ describe("OrderPanel", () => {
   };
 
   it("shows empty state when no order", () => {
-    render(<OrderPanel order={null} onPrintPickup={vi.fn()} onPrintFinal={vi.fn()} onPayAndClose={vi.fn()} onCancel={vi.fn()} />);
+    render(<OrderPanel order={null} {...emptyProps} />);
     expect(screen.getByText(/No open order/)).toBeInTheDocument();
   });
 
   it("shows order ID, items, and total", () => {
-    render(<OrderPanel order={order} onPrintPickup={vi.fn()} onPrintFinal={vi.fn()} onPayAndClose={vi.fn()} onCancel={vi.fn()} />);
+    render(<OrderPanel order={order} {...emptyProps} />);
     expect(screen.getByText(/Order #12345678/)).toBeInTheDocument();
     expect(screen.getByText("Espresso")).toBeInTheDocument();
     expect(screen.getByText("Cappuccino")).toBeInTheDocument();
@@ -73,35 +70,66 @@ describe("OrderPanel", () => {
   });
 
   it("shows quantity and unit price", () => {
-    render(<OrderPanel order={order} onPrintPickup={vi.fn()} onPrintFinal={vi.fn()} onPayAndClose={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByText("2× 2.50€")).toBeInTheDocument();
-    expect(screen.getByText("1× 3.20€")).toBeInTheDocument();
+    render(<OrderPanel order={order} {...emptyProps} />);
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
   });
 
-  it("Print Pickup button per item", () => {
-    const onPrintPickup = vi.fn();
-    render(<OrderPanel order={order} onPrintPickup={onPrintPickup} onPrintFinal={vi.fn()} onPayAndClose={vi.fn()} onCancel={vi.fn()} />);
-    const buttons = screen.getAllByText("Pickup");
-    expect(buttons).toHaveLength(2);
-    fireEvent.click(buttons[0]);
-    expect(onPrintPickup).toHaveBeenCalledWith("i1");
+  it("calls onIncreaseQty when + button clicked", () => {
+    const onIncreaseQty = vi.fn();
+    render(<OrderPanel order={order} {...emptyProps} onIncreaseQty={onIncreaseQty} />);
+    const plusButtons = screen.getAllByLabelText("Increase quantity");
+    fireEvent.click(plusButtons[0]);
+    expect(onIncreaseQty).toHaveBeenCalledWith("i1");
   });
 
-  it("Pay & Close and Cancel buttons are present", () => {
-    render(<OrderPanel order={order} onPrintPickup={vi.fn()} onPrintFinal={vi.fn()} onPayAndClose={vi.fn()} onCancel={vi.fn()} />);
+  it("calls onDecreaseQty when − button clicked on item with qty > 1", () => {
+    const onDecreaseQty = vi.fn();
+    render(<OrderPanel order={order} {...emptyProps} onDecreaseQty={onDecreaseQty} />);
+    const minusButtons = screen.getAllByLabelText("Decrease quantity");
+    fireEvent.click(minusButtons[0]); // Espresso has qty=2
+    expect(onDecreaseQty).toHaveBeenCalledWith("i1");
+  });
+
+  it("calls onRemoveItem when − button clicked on item with qty = 1", () => {
+    const onRemoveItem = vi.fn();
+    render(<OrderPanel order={order} {...emptyProps} onRemoveItem={onRemoveItem} />);
+    const minusButtons = screen.getAllByLabelText("Decrease quantity");
+    fireEvent.click(minusButtons[1]); // Cappuccino has qty=1
+    expect(onRemoveItem).toHaveBeenCalledWith("i2");
+  });
+
+  it("calls onRemoveItem when × button clicked", () => {
+    const onRemoveItem = vi.fn();
+    render(<OrderPanel order={order} {...emptyProps} onRemoveItem={onRemoveItem} />);
+    const removeButtons = screen.getAllByLabelText("Remove item");
+    fireEvent.click(removeButtons[0]);
+    expect(onRemoveItem).toHaveBeenCalledWith("i1");
+  });
+
+  it("Print button triggers onPrint", () => {
+    const onPrint = vi.fn();
+    render(<OrderPanel order={order} {...emptyProps} onPrint={onPrint} />);
+    fireEvent.click(screen.getByText("Print"));
+    expect(onPrint).toHaveBeenCalled();
+  });
+
+  it("Pay & Close and Print buttons are present", () => {
+    render(<OrderPanel order={order} {...emptyProps} />);
+    expect(screen.getByText("Print")).toBeInTheDocument();
     expect(screen.getByText("Pay & Close")).toBeInTheDocument();
     expect(screen.getByText("Cancel")).toBeInTheDocument();
   });
 
   it("disables Pay & Close when no items", () => {
     const empty = { ...order, items: [] };
-    render(<OrderPanel order={empty} onPrintPickup={vi.fn()} onPrintFinal={vi.fn()} onPayAndClose={vi.fn()} onCancel={vi.fn()} />);
+    render(<OrderPanel order={empty} {...emptyProps} />);
     expect(screen.getByText("Pay & Close")).toBeDisabled();
   });
 
   it("calls onCancel when Cancel clicked", () => {
     const onCancel = vi.fn();
-    render(<OrderPanel order={order} onPrintPickup={vi.fn()} onPrintFinal={vi.fn()} onPayAndClose={vi.fn()} onCancel={onCancel} />);
+    render(<OrderPanel order={order} {...emptyProps} onCancel={onCancel} />);
     fireEvent.click(screen.getByText("Cancel"));
     expect(onCancel).toHaveBeenCalled();
   });
