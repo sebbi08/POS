@@ -54,7 +54,16 @@ function App() {
           )
         }
       />
-      <Route path="/admin" element={<AdminLayout onLogout={handleLogout} />} />
+      <Route
+        path="/admin"
+        element={
+          session.type === "admin" ? (
+            <AdminLayout onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/pos" replace />
+          )
+        }
+      />
       <Route path="*" element={<Navigate to={session.type === "admin" ? "/admin" : "/pos"} replace />} />
     </Routes>
   );
