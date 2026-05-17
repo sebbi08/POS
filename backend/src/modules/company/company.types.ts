@@ -4,5 +4,3 @@ export interface CompanySettings {
   city: string;
   vatId: string;
 }
-
-export interface CompanySettingsUpdatedEvent extends CompanySettings {}
