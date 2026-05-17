@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import CatalogManager from "../components/CatalogManager";
 import AdminLayout from "../views/AdminLayout";
 import TransactionHistory from "../components/TransactionHistory";
@@ -20,7 +19,7 @@ vi.mock("../api/client", () => ({
     }),
     post: vi.fn().mockResolvedValue({ id: "new-id" }),
     put: vi.fn().mockResolvedValue({ status: "updated" }),
-    delete: vi.fn().mockResolvedValue({ status: "archived" }),
+    delete: vi.fn().mockResolvedValue({ status: "deleted" }),
     clearAdminPin: vi.fn(),
   },
 }));
@@ -34,8 +33,8 @@ describe("CatalogManager", () => {
 
   it("shows group list with VAT rates", async () => {
     vi.mocked(api.get).mockResolvedValue([
-      { id: "g1", name: "Hot Drinks", vatRate: 19, archived: false },
-      { id: "g2", name: "Food", vatRate: 7, archived: false },
+      { id: "g1", name: "Hot Drinks", vatRate: 19 },
+      { id: "g2", name: "Food", vatRate: 7 },
     ]);
     render(<CatalogManager type="groups" />);
     await waitFor(() => {
@@ -46,10 +45,10 @@ describe("CatalogManager", () => {
 
   it("shows item list with group names and prices", async () => {
     vi.mocked(api.get).mockResolvedValueOnce([
-      { id: "g1", name: "Hot Drinks", vatRate: 19, archived: false },
+      { id: "g1", name: "Hot Drinks", vatRate: 19 },
     ]);
     vi.mocked(api.get).mockResolvedValueOnce([
-      { id: "i1", name: "Espresso", groupId: "g1", price: 2.50, archived: false },
+      { id: "i1", name: "Espresso", groupId: "g1", price: 2.50 },
     ]);
     render(<CatalogManager type="items" />);
     await waitFor(() => {
@@ -58,14 +57,14 @@ describe("CatalogManager", () => {
     });
   });
 
-  it("Archive button calls DELETE (never removes)", async () => {
+  it("Delete button calls DELETE", async () => {
     vi.mocked(api.get).mockResolvedValue([
-      { id: "g1", name: "Drinks", vatRate: 19, archived: false },
+      { id: "g1", name: "Drinks", vatRate: 19 },
     ]);
     render(<CatalogManager type="groups" />);
     await waitFor(() => screen.getByText("Drinks"));
 
-    fireEvent.click(screen.getByText("Archive"));
+    fireEvent.click(screen.getByText("Delete"));
     expect(api.delete).toHaveBeenCalledWith("/catalog/groups/g1");
   });
 });
@@ -106,15 +105,15 @@ describe("TransactionHistory", () => {
 
   it("shows closed and cancelled orders with status badges", async () => {
     vi.mocked(api.get).mockResolvedValue([
-      { orderId: "abc12345-1234", terminalId: "Bar", userName: "Bar", items: "1x Espresso", totalGross: 2.50, totalVat: 0.40, status: "closed", closedAt: "2026-01-01T12:00:00Z" },
-      { orderId: "def67890-5678", terminalId: "Bar", userName: "Bar", items: "2x Latte", totalGross: 7.00, totalVat: 1.12, status: "cancelled", reason: "Wrong order", closedAt: "2026-01-01T12:05:00Z" },
+      { orderId: "abc12345-1234", terminalId: "Bar", items: "1x Espresso", totalGross: 2.50, status: "closed", closedAt: "2026-01-01T12:00:00Z" },
+      { orderId: "def67890-5678", terminalId: "Bar", items: "2x Latte", totalGross: -7.00, status: "cancelled", title: "Cancellation of order #abc12345", closedAt: "2026-01-01T12:05:00Z" },
     ]);
 
     render(<TransactionHistory />);
     await waitFor(() => {
       expect(screen.getByText("closed")).toBeInTheDocument();
       expect(screen.getByText("cancelled")).toBeInTheDocument();
-      expect(screen.getByText("Wrong order")).toBeInTheDocument();
+      expect(screen.getByText("Cancellation of order #abc12345")).toBeInTheDocument();
     });
   });
 
