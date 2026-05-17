@@ -32,7 +32,7 @@ describe("CatalogManager", () => {
   });
 
   it("shows group list with VAT rates", async () => {
-    vi.mocked(api.get).mockResolvedValue([
+    vi.mocked(api.get).mockResolvedValueOnce([
       { id: "g1", name: "Hot Drinks", vatRate: 19 },
       { id: "g2", name: "Food", vatRate: 7 },
     ]);
@@ -58,7 +58,7 @@ describe("CatalogManager", () => {
   });
 
   it("Delete button calls DELETE", async () => {
-    vi.mocked(api.get).mockResolvedValue([
+    vi.mocked(api.get).mockResolvedValueOnce([
       { id: "g1", name: "Drinks", vatRate: 19 },
     ]);
     render(<CatalogManager type="groups" />);
@@ -104,7 +104,7 @@ describe("TransactionHistory", () => {
   });
 
   it("shows closed and cancelled orders with status badges", async () => {
-    vi.mocked(api.get).mockResolvedValue([
+    vi.mocked(api.get).mockResolvedValueOnce([
       { orderId: "abc12345-1234", terminalId: "Bar", items: "1x Espresso", totalGross: 2.50, status: "closed", closedAt: "2026-01-01T12:00:00Z" },
       { orderId: "def67890-5678", terminalId: "Bar", items: "2x Latte", totalGross: -7.00, status: "cancelled", title: "Cancellation of order #abc12345", closedAt: "2026-01-01T12:05:00Z" },
     ]);
@@ -118,7 +118,7 @@ describe("TransactionHistory", () => {
   });
 
   it("has search and filter inputs", async () => {
-    vi.mocked(api.get).mockResolvedValue([]);
+    vi.mocked(api.get).mockResolvedValueOnce([]);
     render(<TransactionHistory />);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("Search by order ID or item...")).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("TransactionHistory", () => {
   });
 
   it("shows empty state when no transactions", async () => {
-    vi.mocked(api.get).mockResolvedValue([]);
+    vi.mocked(api.get).mockResolvedValueOnce([]);
     render(<TransactionHistory />);
     await waitFor(() => {
       expect(screen.getByText("No transactions found")).toBeInTheDocument();
@@ -137,7 +137,7 @@ describe("TransactionHistory", () => {
 
 describe("DailyOverview", () => {
   it("shows summary cards and breakdown", async () => {
-    vi.mocked(api.get).mockResolvedValue({
+    vi.mocked(api.get).mockResolvedValueOnce({
       date: "2026-05-13",
       orderCount: 47,
       cancelledCount: 2,
@@ -159,7 +159,7 @@ describe("DailyOverview", () => {
   });
 
   it("shows cancelled order warning when count > 0", async () => {
-    vi.mocked(api.get).mockResolvedValue({
+    vi.mocked(api.get).mockResolvedValueOnce({
       date: "2026-05-13",
       orderCount: 10,
       cancelledCount: 3,
