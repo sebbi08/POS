@@ -4,11 +4,11 @@ import { api } from "../api/client";
 interface Transaction {
   orderId: string;
   terminalId: string;
-  userName: string;
   items: string;
   totalGross: number;
   status: string;
-  reason?: string;
+  title?: string;
+  cancelsOrderId?: string;
   closedAt: string;
 }
 
@@ -61,10 +61,10 @@ function TransactionHistory() {
           <tr className="text-gray-400 border-b border-gray-700">
             <th className="text-left py-2">Order #</th>
             <th className="text-left py-2">Terminal</th>
-            <th className="text-left py-2">User</th>
             <th className="text-left py-2">Items</th>
             <th className="text-right py-2">Total</th>
             <th className="text-left py-2">Status</th>
+            <th className="text-left py-2">Title</th>
             <th className="text-left py-2">Closed</th>
           </tr>
         </thead>
@@ -78,7 +78,6 @@ function TransactionHistory() {
             >
               <td className="py-2">{t.orderId.slice(0, 8)}</td>
               <td className="py-2 text-gray-400">{t.terminalId}</td>
-              <td className="py-2 text-gray-400">{t.userName}</td>
               <td className="py-2">{t.items}</td>
               <td className="py-2 text-right">{t.totalGross.toFixed(2)}€</td>
               <td className="py-2">
@@ -91,9 +90,9 @@ function TransactionHistory() {
                 >
                   {t.status}
                 </span>
-                {t.reason && (
-                  <span className="text-gray-500 text-xs ml-2">{t.reason}</span>
-                )}
+              </td>
+              <td className="py-2 text-gray-500 text-xs">
+                {t.title || (t.cancelsOrderId ? `Cancels #${t.cancelsOrderId.slice(0, 8)}` : "")}
               </td>
               <td className="py-2 text-gray-500 text-xs">
                 {t.closedAt ? new Date(t.closedAt).toLocaleTimeString("de-DE") : ""}
