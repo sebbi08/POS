@@ -1,12 +1,11 @@
 import { Router, Request, Response } from "express";
 import { checkAdmin } from "../middleware/auth.middleware";
-import { updateCompanySettings } from "../../modules/company/company.commands";
-import { companySettings } from "../../modules/company/company.projections";
+import { getCompanySettings, updateCompanySettings } from "../../modules/company/company.repository";
 
 const router = Router();
 
 router.get("/", (_req: Request, res: Response): void => {
-  res.json(companySettings);
+  getCompanySettings().then((settings) => res.json(settings));
 });
 
 router.put("/", checkAdmin, (req: Request, res: Response): void => {
