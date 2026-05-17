@@ -11,6 +11,8 @@ import {
 } from "../../modules/orders/orders.commands";
 import { orders } from "../../modules/orders/orders.projections";
 import { generatePickupReceiptPdf, generateFinalReceiptPdf } from "../../modules/receipts/receipts.pdf";
+import { getItem } from "../../modules/catalog/catalog.repository";
+import { getGroup } from "../../modules/catalog/catalog.repository";
 
 const router = Router();
 
@@ -24,14 +26,25 @@ router.get("/", (req: Request, res: Response): void => {
 
 router.post("/open", (req: Request, res: Response): void => {
   const { terminalId } = req.body;
-  openOrder(terminalId, terminalId).then((id) => res.json({ id }));
+  openOrder(terminalId).then((id) => res.json({ id }));
 });
 
-router.post("/:id/items", (_req: Request, res: Response): void => {
-  const { itemId, qty } = _req.body;
-  addItemToOrder(_req.params.id, itemId, qty || 1).then(() =>
-    res.json({ status: "item added" })
-  );
+router.post("/:id/items", async (req: Request, res: Response): void => {
+  const { itemId, qty } = req.body;
+  try {
+    const item = await getItem(itemId);
+    if (!item) {
+      res.status(404).json({ error: `Item ${itemId} not found` });
+      return;
+    }
+    const group = await getGroup(item.groupId);
+    const vatRate = group ? group.vatRate : 0;
+    addItemToOrder(req.params.id, item.id, item.name, qty || 1, item.price, vatRate).then(() =>
+      res.json({ status: "item added" })
+    );
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 router.delete("/:id/items/:itemId", (req: Request, res: Response): void => {
@@ -66,8 +79,15 @@ router.post("/:id/close", (req: Request, res: Response): void => {
 
 router.post("/:id/cancel", (req: Request, res: Response): void => {
   const { reason } = req.body;
-  cancelOrder(req.params.id, reason || "Cancelled from terminal", "terminal").then(() =>
-    res.json({ status: "cancelled" })
+  const order = orders.get(req.params.id);
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+  cancelOrder(req.params.id, order.terminalId, reason).then((cancellationId) =>
+    res.json({ status: "cancelled", cancellationId })
+  ).catch((err: Error) =>
+    res.status(400).json({ error: err.message })
   );
 });
 
