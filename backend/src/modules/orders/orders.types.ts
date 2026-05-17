@@ -1,4 +1,4 @@
-export type OrderStatus = "open" | "paid" | "closed" | "cancelled";
+export type OrderStatus = "open" | "paid" | "closed";
 
 export interface OrderItem {
   itemId: string;
@@ -13,7 +13,6 @@ export interface OrderItem {
 export interface Order {
   id: string;
   terminalId: string;
-  userId: string;
   status: OrderStatus;
   items: OrderItem[];
   pickupSeq: number;
@@ -22,13 +21,14 @@ export interface Order {
   totalNet: number;
   createdAt: Date;
   closedAt?: Date;
-  cancelledReason?: string;
+  title?: string;
+  cancelsOrderId?: string;
+  cancelledByOrderId?: string;
 }
 
 export interface OrderOpenedEvent {
   id: string;
   terminalId: string;
-  userId: string;
 }
 
 export interface ItemAddedEvent {
@@ -67,8 +67,15 @@ export interface OrderClosedEvent {
   orderId: string;
 }
 
-export interface OrderCancelledEvent {
-  orderId: string;
-  reason: string;
-  userId: string;
+export interface OrderCancellationCreatedEvent {
+  id: string;
+  terminalId: string;
+  title: string;
+  cancelsOrderId: string;
+  items: OrderItem[];
+  totalGross: number;
+  totalVat: Record<number, number>;
+  totalNet: number;
+  createdAt: string;
+  closedAt: string;
 }
