@@ -2,7 +2,6 @@ export interface ItemGroup {
   id: string;
   name: string;
   vatRate: number;
-  archived: boolean;
 }
 
 export interface Item {
@@ -10,39 +9,21 @@ export interface Item {
   name: string;
   groupId: string;
   price: number;
-  archived: boolean;
 }
 
-export interface ItemGroupCreatedEvent {
+export interface ItemGroupRow {
   id: string;
   name: string;
-  vatRate: number;
+  vat_rate: number;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface ItemGroupUpdatedEvent {
+export interface ItemRow {
   id: string;
   name: string;
-  vatRate: number;
-}
-
-export interface ItemGroupArchivedEvent {
-  id: string;
-}
-
-export interface ItemCreatedEvent {
-  id: string;
-  name: string;
-  groupId: string;
+  group_id: string;
   price: number;
-}
-
-export interface ItemUpdatedEvent {
-  id: string;
-  name: string;
-  groupId: string;
-  price: number;
-}
-
-export interface ItemArchivedEvent {
-  id: string;
+  created_at: string;
+  updated_at: string;
 }
