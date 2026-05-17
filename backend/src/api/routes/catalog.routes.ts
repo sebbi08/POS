@@ -1,43 +1,44 @@
 import { Router, Request, Response } from "express";
 import { checkAdmin } from "../middleware/auth.middleware";
 import {
-  createItemGroup,
-  updateItemGroup,
-  archiveItemGroup,
+  listGroups,
+  createGroup,
+  updateGroup,
+  deleteGroup,
+  listItems,
   createItem,
   updateItem,
-  archiveItem,
-} from "../../modules/catalog/catalog.commands";
-import { groups, items } from "../../modules/catalog/catalog.projections";
+  deleteItem,
+} from "../../modules/catalog/catalog.repository";
 
 const router = Router();
 
 router.use(checkAdmin);
 
 router.get("/groups", (_req: Request, res: Response): void => {
-  res.json(Array.from(groups.values()));
+  listGroups().then((groups) => res.json(groups));
 });
 
 router.post("/groups", (req: Request, res: Response): void => {
   const { name, vatRate } = req.body;
-  createItemGroup(name, vatRate).then((id) => res.json({ id }));
+  createGroup(name, vatRate).then((id) => res.json({ id }));
 });
 
 router.put("/groups/:id", (req: Request, res: Response): void => {
   const { name, vatRate } = req.body;
-  updateItemGroup(req.params.id, name, vatRate).then(() =>
+  updateGroup(req.params.id, name, vatRate).then(() =>
     res.json({ status: "updated" })
   );
 });
 
 router.delete("/groups/:id", (req: Request, res: Response): void => {
-  archiveItemGroup(req.params.id).then(() =>
-    res.json({ status: "archived" })
+  deleteGroup(req.params.id).then(() =>
+    res.json({ status: "deleted" })
   );
 });
 
 router.get("/items", (_req: Request, res: Response): void => {
-  res.json(Array.from(items.values()));
+  listItems().then((items) => res.json(items));
 });
 
 router.post("/items", (req: Request, res: Response): void => {
@@ -53,8 +54,8 @@ router.put("/items/:id", (req: Request, res: Response): void => {
 });
 
 router.delete("/items/:id", (req: Request, res: Response): void => {
-  archiveItem(req.params.id).then(() =>
-    res.json({ status: "archived" })
+  deleteItem(req.params.id).then(() =>
+    res.json({ status: "deleted" })
   );
 });
 
