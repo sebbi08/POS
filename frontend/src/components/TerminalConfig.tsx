@@ -5,7 +5,6 @@ interface Terminal {
   id: string;
   name: string;
   groupIds: string[];
-  archived: boolean;
 }
 
 interface ItemGroup {
@@ -38,28 +37,26 @@ function TerminalConfig() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <div className="flex flex-wrap gap-1">
-            {groups
-              .filter((g) => !(g as unknown as { archived?: boolean }).archived)
-              .map((g) => (
-                <button
-                  key={g.id}
-                  onClick={() =>
-                    setForm({
-                      ...form,
-                      groupIds: form.groupIds.includes(g.id)
-                        ? form.groupIds.filter((id) => id !== g.id)
-                        : [...form.groupIds, g.id],
-                    })
-                  }
-                  className={`px-2 py-1 rounded text-xs ${
-                    form.groupIds.includes(g.id)
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-700 text-gray-300"
-                  }`}
-                >
-                  {g.name}
-                </button>
-              ))}
+            {groups.map((g) => (
+              <button
+                key={g.id}
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    groupIds: form.groupIds.includes(g.id)
+                      ? form.groupIds.filter((id) => id !== g.id)
+                      : [...form.groupIds, g.id],
+                  })
+                }
+                className={`px-2 py-1 rounded text-xs ${
+                  form.groupIds.includes(g.id)
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-700 text-gray-300"
+                }`}
+              >
+                {g.name}
+              </button>
+            ))}
           </div>
           <button
             onClick={async () => {
@@ -78,30 +75,28 @@ function TerminalConfig() {
       </div>
 
       <div className="space-y-3">
-        {terminals
-          .filter((t) => !t.archived)
-          .map((t) => (
-            <div
-              key={t.id}
-              className="bg-gray-800 rounded-xl p-4 flex items-center justify-between"
-            >
-              <div>
-                <div className="text-white font-medium">{t.name}</div>
-                <div className="text-gray-400 text-xs mt-1">
-                  Groups:{" "}
-                  {t.groupIds
-                    .map((gid) => groups.find((g) => g.id === gid)?.name ?? "")
-                    .join(", ")}
-                </div>
+        {terminals.map((t) => (
+          <div
+            key={t.id}
+            className="bg-gray-800 rounded-xl p-4 flex items-center justify-between"
+          >
+            <div>
+              <div className="text-white font-medium">{t.name}</div>
+              <div className="text-gray-400 text-xs mt-1">
+                Groups:{" "}
+                {t.groupIds
+                  .map((gid) => groups.find((g) => g.id === gid)?.name ?? "")
+                  .join(", ")}
               </div>
-              <button
-                onClick={() => api.delete(`/terminals/${t.id}`).then(load)}
-                className="text-red-400 hover:text-red-300 text-sm"
-              >
-                Archive
-              </button>
             </div>
-          ))}
+            <button
+              onClick={() => api.delete(`/terminals/${t.id}`).then(load)}
+              className="text-red-400 hover:text-red-300 text-sm"
+            >
+              Delete
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );
