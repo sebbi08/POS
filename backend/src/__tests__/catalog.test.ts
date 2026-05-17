@@ -1,16 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("../eventstore/client", () => ({
-  appendEvent: vi.fn().mockResolvedValue(undefined),
-  initEventStore: vi.fn().mockResolvedValue(undefined),
-  readStream: vi.fn().mockResolvedValue([]),
-  subscribeToAll: vi.fn(),
-  replayAll: vi.fn().mockResolvedValue(undefined),
+vi.mock("../db", () => ({
   getPool: vi.fn().mockReturnValue({
-    query: vi.fn().mockResolvedValue({ rows: [{ count: "0" }] }),
+    query: vi.fn().mockResolvedValue({ rows: [] }),
     connect: vi.fn().mockResolvedValue({ query: vi.fn(), release: vi.fn(), on: vi.fn() }),
-    on: vi.fn(),
   }),
+  initTables: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../config", () => ({
@@ -22,67 +17,31 @@ vi.mock("../config", () => ({
   },
 }));
 
-vi.mock("../projections/runner", () => ({
-  registerProjection: vi.fn(),
-  startProjections: vi.fn().mockResolvedValue(undefined),
-}));
+import { listGroups, createGroup, listItems, createItem, deleteItem } from "../modules/catalog/catalog.repository";
 
-import { appendEvent } from "../eventstore/client";
-import { createItemGroup, archiveItem } from "../modules/catalog/catalog.commands";
-import { items, groups, initCatalogProjections } from "../modules/catalog/catalog.projections";
-import { registerProjection } from "../projections/runner";
+describe("Catalog Repository", () => {
+  it("listGroups returns empty array when no rows", async () => {
+    const result = await listGroups();
+    expect(result).toEqual([]);
+  });
 
-describe("Catalog Commands", () => {
-  it("creates an item group and writes event", async () => {
-    const id = await createItemGroup("Hot Drinks", 19);
+  it("createGroup returns an id", async () => {
+    const id = await createGroup("Hot Drinks", 19);
     expect(id).toBeTruthy();
-    expect(vi.mocked(appendEvent)).toHaveBeenCalledWith(
-      expect.stringContaining("catalog-"),
-      "ItemGroupCreated",
-      expect.objectContaining({ name: "Hot Drinks", vatRate: 19 })
-    );
+    expect(typeof id).toBe("string");
   });
 
-  it("archives an item (never deletes)", async () => {
-    await archiveItem("item-1");
-    expect(vi.mocked(appendEvent)).toHaveBeenCalledWith(
-      "catalog-item-1",
-      "ItemArchived",
-      { id: "item-1" }
-    );
-  });
-});
-
-describe("Catalog Projections", () => {
-  it("builds groups and items from events, archives items", () => {
-    groups.clear();
-    items.clear();
-
-    initCatalogProjections();
-    const m = vi.mocked(registerProjection);
-    const handler = m.mock.calls[0][2];
-
-    handler({ type: "ItemGroupCreated", data: { id: "g1", name: "Drinks", vatRate: 19 } }, "catalog-g1");
-    expect(groups.get("g1")).toEqual({ id: "g1", name: "Drinks", vatRate: 19, archived: false });
-
-    handler({ type: "ItemCreated", data: { id: "i1", name: "Espresso", groupId: "g1", price: 2.50 } }, "catalog-i1");
-    expect(items.get("i1")!.price).toBe(2.50);
-
-    handler({ type: "ItemArchived", data: { id: "i1" } }, "catalog-i1");
-    expect(items.get("i1")!.archived).toBe(true);
+  it("listItems returns empty array when no rows", async () => {
+    const result = await listItems();
+    expect(result).toEqual([]);
   });
 
-  it("archived items are still in projection (never deleted)", () => {
-    groups.clear();
-    items.clear();
+  it("createItem returns an id", async () => {
+    const id = await createItem("Espresso", "g1", 2.50);
+    expect(id).toBeTruthy();
+  });
 
-    initCatalogProjections();
-    const m = vi.mocked(registerProjection);
-    const handler = m.mock.calls[m.mock.calls.length - 1][2];
-
-    handler({ type: "ItemCreated", data: { id: "i2", name: "Latte", groupId: "g1", price: 3.0 } }, "catalog-i2");
-    handler({ type: "ItemArchived", data: { id: "i2" } }, "catalog-i2");
-    expect(items.has("i2")).toBe(true);
-    expect(items.get("i2")!.archived).toBe(true);
+  it("deleteItem does not throw", async () => {
+    await expect(deleteItem("i1")).resolves.toBeUndefined();
   });
 });

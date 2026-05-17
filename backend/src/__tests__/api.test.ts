@@ -2,10 +2,19 @@ import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
-vi.mock("../eventstore/client", () => ({
-  appendEvent: vi.fn().mockResolvedValue(undefined),
-  initEventStore: vi.fn().mockResolvedValue(undefined),
-  getPool: vi.fn().mockReturnValue({ query: vi.fn().mockResolvedValue({ rows: [{ count: "0" }] }) }),
+vi.mock("../db", () => ({
+  getPool: vi.fn().mockReturnValue({
+    query: vi.fn().mockResolvedValue({ rows: [] }),
+    connect: vi.fn().mockResolvedValue({ query: vi.fn(), release: vi.fn(), on: vi.fn() }),
+  }),
+  initTables: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../modules/orders/order-eventstore", () => ({
+  appendOrderEvent: vi.fn().mockResolvedValue(undefined),
+  readOrderStream: vi.fn().mockResolvedValue([]),
+  subscribeToOrderEvents: vi.fn(),
+  replayOrderEvents: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../projections/runner", () => ({
