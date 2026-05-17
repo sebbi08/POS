@@ -5,7 +5,6 @@ interface ItemGroup {
   id: string;
   name: string;
   vatRate: number;
-  archived: boolean;
 }
 
 interface Item {
@@ -13,7 +12,6 @@ interface Item {
   name: string;
   groupId: string;
   price: number;
-  archived: boolean;
 }
 
 interface Props {
@@ -32,7 +30,7 @@ function CatalogManager({ type }: Props) {
       api.get<Item[]>("/catalog/items"),
     ]).then(([g, i]) => {
       setGroups(g);
-      setItems(i.filter((item) => !item.archived));
+      setItems(i);
       setLoading(false);
     });
   };
@@ -95,22 +93,20 @@ function CatalogManager({ type }: Props) {
               </tr>
             </thead>
             <tbody>
-              {groups
-                .filter((g) => !g.archived)
-                .map((g) => (
-                  <tr key={g.id} className="border-b border-gray-800">
-                    <td className="text-white py-2">{g.name}</td>
-                    <td className="text-white text-right py-2">{g.vatRate}%</td>
-                    <td className="text-right py-2">
-                      <button
-                        onClick={() => api.delete(`/catalog/groups/${g.id}`).then(load)}
-                        className="text-red-400 hover:text-red-300 text-xs"
-                      >
-                        Archive
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+              {groups.map((g) => (
+                <tr key={g.id} className="border-b border-gray-800">
+                  <td className="text-white py-2">{g.name}</td>
+                  <td className="text-white text-right py-2">{g.vatRate}%</td>
+                  <td className="text-right py-2">
+                    <button
+                      onClick={() => api.delete(`/catalog/groups/${g.id}`).then(load)}
+                      className="text-red-400 hover:text-red-300 text-xs"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </>
@@ -132,13 +128,11 @@ function CatalogManager({ type }: Props) {
                 onChange={(e) => setForm({ ...form, groupId: e.target.value })}
               >
                 <option value="">Select group</option>
-                {groups
-                  .filter((g) => !g.archived)
-                  .map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
               </select>
               <input
                 className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
@@ -189,7 +183,7 @@ function CatalogManager({ type }: Props) {
                       onClick={() => api.delete(`/catalog/items/${item.id}`).then(load)}
                       className="text-red-400 hover:text-red-300 text-xs"
                     >
-                      Archive
+                      Delete
                     </button>
                   </td>
                 </tr>
