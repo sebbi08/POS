@@ -241,8 +241,9 @@ router.post("/import", upload.single("file"), async (req: Request, res: Response
     };
     res.json(result);
   } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
+    await client.query("ROLLBACK").catch(() => {});
+    res.status(500).json({ errors: [String(err)] });
+    return;
   } finally {
     client.release();
   }
