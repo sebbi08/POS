@@ -1,7 +1,7 @@
 import { v4 as uuid } from "uuid";
 import { getPool } from "../../db";
 import { initTables } from "../../db";
-import { ItemGroup, Item, ItemGroupRow, ItemRow } from "./catalog.types";
+import { ItemGroup, Item, ItemGroupRow, ItemRow, ExportRow } from "./catalog.types";
 
 function groupFromRow(row: ItemGroupRow): ItemGroup {
   return { id: row.id, name: row.name, vatRate: Number(row.vat_rate) };
@@ -89,4 +89,35 @@ export async function getItem(id: string): Promise<Item | null> {
   );
   if (result.rows.length === 0) return null;
   return itemFromRow(result.rows[0]);
+}
+
+export async function getGroupByName(name: string): Promise<ItemGroup | null> {
+  await initTables();
+  const result = await getPool().query<ItemGroupRow>(
+    `SELECT * FROM item_groups WHERE name = $1`, [name]
+  );
+  if (result.rows.length === 0) return null;
+  return groupFromRow(result.rows[0]);
+}
+
+export async function exportItems(groupId?: string): Promise<ExportRow[]> {
+  await initTables();
+  let query = `
+    SELECT i.id, i.name, g.name AS group_name, g.vat_rate AS group_vat_rate, i.price
+    FROM items i JOIN item_groups g ON i.group_id = g.id
+  `;
+  const params: string[] = [];
+  if (groupId) {
+    query += ` WHERE i.group_id = $1`;
+    params.push(groupId);
+  }
+  query += ` ORDER BY g.name, i.name`;
+  const result = await getPool().query(query, params);
+  return result.rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    group_name: r.group_name,
+    group_vat_rate: Number(r.group_vat_rate),
+    price: Number(r.price),
+  }));
 }
