@@ -27,3 +27,32 @@ export interface ItemRow {
   created_at: string;
   updated_at: string;
 }
+
+export interface ExportRow {
+  id: string;
+  name: string;
+  group_name: string;
+  group_vat_rate: number;
+  price: number;
+}
+
+export interface ImportRow {
+  id: string;
+  name: string;
+  groupName: string;
+  groupVatRate: string;
+  price: string;
+}
+
+export interface ImportPreview {
+  groupsToCreate: { name: string; vatRate: number }[];
+  itemsToCreate: { id: string; name: string; groupName: string; price: number }[];
+  itemsToUpdate: { id: string; name: string; groupName: string; price: number; oldName: string; oldPrice: number; oldGroupName: string }[];
+  errors: string[];
+}
+
+export interface ImportResult extends ImportPreview {
+  groupsCreated: number;
+  itemsCreated: number;
+  itemsUpdated: number;
+}
