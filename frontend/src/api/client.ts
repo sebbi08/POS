@@ -62,7 +62,7 @@ export const api = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || "Request failed");
+      throw new Error(err.errors?.[0] || err.error || "Request failed");
     }
     return res.json();
   },

@@ -91,167 +91,167 @@ router.post("/import", upload.single("file"), async (req: Request, res: Response
 
     const text = req.file.buffer.toString("utf-8");
     const parseResult = parseCsv(text);
-  if (parseResult.error) {
-    res.status(400).json({ groupsToCreate: [], itemsToCreate: [], itemsToUpdate: [], errors: [parseResult.error] });
-    return;
-  }
-
-  const csvRows = parseResult.rows;
-  const dryRun = req.body.dryRun === "true" || req.body.dryRun === true;
-
-  const errors: string[] = [];
-  const groupsToCreate: ImportPreview["groupsToCreate"] = [];
-  const itemsToCreate: ImportPreview["itemsToCreate"] = [];
-  const itemsToUpdate: ImportPreview["itemsToUpdate"] = [];
-
-  // Validate numeric fields
-  for (let i = 0; i < csvRows.length; i++) {
-    const r = csvRows[i];
-    const rowNum = i + 2;
-    if (isNaN(parseFloat(r.groupVatRate))) {
-      errors.push(`Row ${rowNum}: invalid group_vat_rate "${r.groupVatRate}"`);
+    if (parseResult.error) {
+        res.status(400).json({ groupsToCreate: [], itemsToCreate: [], itemsToUpdate: [], errors: [parseResult.error] });
+        return;
     }
-    if (isNaN(parseFloat(r.price))) {
-      errors.push(`Row ${rowNum}: invalid price "${r.price}"`);
-    }
-  }
 
-  if (errors.length > 0) {
-    res.status(400).json({ groupsToCreate, itemsToCreate, itemsToUpdate, errors });
-    return;
-  }
+    const csvRows = parseResult.rows;
+    const dryRun = req.body.dryRun === "true" || req.body.dryRun === true;
 
-  // Resolve groups (by name, case-sensitive)
-  const groupMap = new Map<string, { name: string; vatRate: number; existingId?: string }>();
-  for (const r of csvRows) {
-    if (!groupMap.has(r.groupName)) {
-      const existing = await getGroupByName(r.groupName);
-      const vatRate = parseFloat(r.groupVatRate);
-      if (existing) {
-        if (existing.vatRate !== vatRate) {
-          errors.push(`Group "${r.groupName}" exists with VAT ${existing.vatRate}%, import has ${vatRate}%`);
+    const errors: string[] = [];
+    const groupsToCreate: ImportPreview["groupsToCreate"] = [];
+    const itemsToCreate: ImportPreview["itemsToCreate"] = [];
+    const itemsToUpdate: ImportPreview["itemsToUpdate"] = [];
+
+    // Validate numeric fields
+    for (let i = 0; i < csvRows.length; i++) {
+        const r = csvRows[i];
+        const rowNum = i + 2;
+        if (isNaN(parseFloat(r.groupVatRate))) {
+            errors.push(`Row ${rowNum}: invalid group_vat_rate "${r.groupVatRate}"`);
         }
-        groupMap.set(r.groupName, { name: r.groupName, vatRate, existingId: existing.id });
-      } else {
-        groupMap.set(r.groupName, { name: r.groupName, vatRate });
-        groupsToCreate.push({ name: r.groupName, vatRate });
-      }
-    }
-  }
-
-  // Load all groups for old-group-name resolution in diffs
-  const allGroups = await listGroups();
-  const groupById = new Map(allGroups.map(g => [g.id, g]));
-
-  // Diff items (by id)
-  for (const r of csvRows) {
-    const price = parseFloat(r.price);
-    const existing = await getItem(r.id);
-
-    if (existing) {
-      const oldGroup = groupById.get(existing.groupId);
-      const oldGroupName = oldGroup?.name || existing.groupId;
-
-      if (existing.name !== r.name || existing.price !== price || existing.groupId !== groupMap.get(r.groupName)?.existingId) {
-        itemsToUpdate.push({
-          id: r.id,
-          name: r.name,
-          groupName: r.groupName,
-          price,
-          oldName: existing.name,
-          oldPrice: existing.price,
-          oldGroupName,
-        });
-      }
-    } else {
-      itemsToCreate.push({
-        id: r.id,
-        name: r.name,
-        groupName: r.groupName,
-        price,
-      });
-    }
-  }
-
-  const preview: ImportPreview = { groupsToCreate, itemsToCreate, itemsToUpdate, errors };
-
-  if (dryRun) {
-    res.json(preview);
-    return;
-  }
-
-  if (errors.length > 0) {
-    res.status(400).json(preview);
-    return;
-  }
-
-  // Execute in transaction
-  const pool = await getPool();
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    let groupsCreated = 0;
-    const finalGroupMap = new Map<string, string>();
-
-    for (const g of groupsToCreate) {
-      const id = uuid();
-      await client.query(
-        `INSERT INTO item_groups (id, name, vat_rate) VALUES ($1, $2, $3)`,
-        [id, g.name, g.vatRate]
-      );
-      finalGroupMap.set(g.name, id);
-      groupsCreated++;
+        if (isNaN(parseFloat(r.price))) {
+            errors.push(`Row ${rowNum}: invalid price "${r.price}"`);
+        }
     }
 
-    for (const [name, info] of groupMap) {
-      if (info.existingId) {
-        finalGroupMap.set(name, info.existingId);
-      }
+    if (errors.length > 0) {
+        res.status(400).json({ groupsToCreate, itemsToCreate, itemsToUpdate, errors });
+        return;
     }
 
-    let itemsCreated = 0;
-    let itemsUpdated = 0;
-
-    for (const item of itemsToCreate) {
-      const groupId = finalGroupMap.get(item.groupName);
-      if (!groupId) continue;
-      await client.query(
-        `INSERT INTO items (id, name, group_id, price) VALUES ($1, $2, $3, $4)`,
-        [item.id, item.name, groupId, item.price]
-      );
-      itemsCreated++;
+    // Resolve groups (by name, case-sensitive)
+    const groupMap = new Map<string, { name: string; vatRate: number; existingId?: string }>();
+    for (const r of csvRows) {
+        if (!groupMap.has(r.groupName)) {
+            const existing = await getGroupByName(r.groupName);
+            const vatRate = parseFloat(r.groupVatRate);
+            if (existing) {
+                if (existing.vatRate !== vatRate) {
+                    errors.push(`Group "${r.groupName}" exists with VAT ${existing.vatRate}%, import has ${vatRate}%`);
+                }
+                groupMap.set(r.groupName, { name: r.groupName, vatRate, existingId: existing.id });
+            } else {
+                groupMap.set(r.groupName, { name: r.groupName, vatRate });
+                groupsToCreate.push({ name: r.groupName, vatRate });
+            }
+        }
     }
 
-    for (const item of itemsToUpdate) {
-      const groupId = finalGroupMap.get(item.groupName);
-      if (!groupId) continue;
-      await client.query(
-        `UPDATE items SET name = $2, group_id = $3, price = $4, updated_at = NOW() WHERE id = $1`,
-        [item.id, item.name, groupId, item.price]
-      );
-      itemsUpdated++;
+    // Load all groups for old-group-name resolution in diffs
+    const allGroups = await listGroups();
+    const groupById = new Map(allGroups.map(g => [g.id, g]));
+
+    // Diff items (by id)
+    for (const r of csvRows) {
+        const price = parseFloat(r.price);
+        const existing = await getItem(r.id);
+
+        if (existing) {
+            const oldGroup = groupById.get(existing.groupId);
+            const oldGroupName = oldGroup?.name || existing.groupId;
+
+            if (existing.name !== r.name || existing.price !== price || existing.groupId !== groupMap.get(r.groupName)?.existingId) {
+                itemsToUpdate.push({
+                    id: r.id,
+                    name: r.name,
+                    groupName: r.groupName,
+                    price,
+                    oldName: existing.name,
+                    oldPrice: existing.price,
+                    oldGroupName,
+                });
+            }
+        } else {
+            itemsToCreate.push({
+                id: r.id,
+                name: r.name,
+                groupName: r.groupName,
+                price,
+            });
+        }
     }
 
-    await client.query("COMMIT");
+    const preview: ImportPreview = { groupsToCreate, itemsToCreate, itemsToUpdate, errors };
 
-    const result: ImportResult = {
-      groupsCreated,
-      itemsCreated,
-      itemsUpdated,
-      groupsToCreate,
-      itemsToCreate,
-      itemsToUpdate,
-      errors,
-    };
-    res.json(result);
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    res.status(500).json({ errors: [String(err)] });
-    return;
-  } finally {
-    client.release();
-  }
+    if (dryRun) {
+        res.json(preview);
+        return;
+    }
+
+    if (errors.length > 0) {
+        res.status(400).json(preview);
+        return;
+    }
+
+    // Execute in transaction
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+
+        let groupsCreated = 0;
+        const finalGroupMap = new Map<string, string>();
+
+        for (const g of groupsToCreate) {
+            const id = uuid();
+            await client.query(
+                `INSERT INTO item_groups (id, name, vat_rate) VALUES ($1, $2, $3)`,
+                [id, g.name, g.vatRate]
+            );
+            finalGroupMap.set(g.name, id);
+            groupsCreated++;
+        }
+
+        for (const [name, info] of groupMap) {
+            if (info.existingId) {
+                finalGroupMap.set(name, info.existingId);
+            }
+        }
+
+        let itemsCreated = 0;
+        let itemsUpdated = 0;
+
+        for (const item of itemsToCreate) {
+            const groupId = finalGroupMap.get(item.groupName);
+            if (!groupId) continue;
+            await client.query(
+                `INSERT INTO items (id, name, group_id, price) VALUES ($1, $2, $3, $4)`,
+                [item.id, item.name, groupId, item.price]
+            );
+            itemsCreated++;
+        }
+
+        for (const item of itemsToUpdate) {
+            const groupId = finalGroupMap.get(item.groupName);
+            if (!groupId) continue;
+            await client.query(
+                `UPDATE items SET name = $2, group_id = $3, price = $4, updated_at = NOW() WHERE id = $1`,
+                [item.id, item.name, groupId, item.price]
+            );
+            itemsUpdated++;
+        }
+
+        await client.query("COMMIT");
+
+        const result: ImportResult = {
+            groupsCreated,
+            itemsCreated,
+            itemsUpdated,
+            groupsToCreate,
+            itemsToCreate,
+            itemsToUpdate,
+            errors,
+        };
+        res.json(result);
+    } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        res.status(500).json({ errors: [String(err)] });
+        return;
+    } finally {
+        client.release();
+    }
   } catch (err) {
     res.status(500).json({ errors: [String(err)] });
   }
