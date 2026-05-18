@@ -19,7 +19,7 @@ import { parseCsv, formatCsvRow } from "../../modules/catalog/catalog.csv";
 import type { ImportPreview, ImportResult } from "../../modules/catalog/catalog.types";
 import { getPool } from "../../db";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 const router = Router();
 
 router.use(checkAdmin);
@@ -69,23 +69,28 @@ router.delete("/items/:id", (req: Request, res: Response): void => {
 });
 
 router.post("/export", async (req: Request, res: Response): Promise<void> => {
-  const { groupId } = req.body;
-  const rows = await exportItems(groupId);
-  const header = formatCsvRow(["id", "name", "group_name", "group_vat_rate", "price"]);
-  const csv = header + "\n" + rows.map(r => formatCsvRow([r.id, r.name, r.group_name, r.group_vat_rate, r.price])).join("\n") + "\n";
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", "attachment; filename=catalog-export.csv");
-  res.send(csv);
+  try {
+    const { groupId } = req.body;
+    const rows = await exportItems(groupId);
+    const header = formatCsvRow(["id", "name", "group_name", "group_vat_rate", "price"]);
+    const csv = header + "\n" + rows.map(r => formatCsvRow([r.id, r.name, r.group_name, r.group_vat_rate, r.price])).join("\n") + "\n";
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=catalog-export.csv");
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 router.post("/import", upload.single("file"), async (req: Request, res: Response): Promise<void> => {
-  if (!req.file) {
-    res.status(400).json({ error: "No file uploaded" });
-    return;
-  }
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: "No file uploaded" });
+      return;
+    }
 
-  const text = req.file.buffer.toString("utf-8");
-  const parseResult = parseCsv(text);
+    const text = req.file.buffer.toString("utf-8");
+    const parseResult = parseCsv(text);
   if (parseResult.error) {
     res.status(400).json({ groupsToCreate: [], itemsToCreate: [], itemsToUpdate: [], errors: [parseResult.error] });
     return;
@@ -246,6 +251,9 @@ router.post("/import", upload.single("file"), async (req: Request, res: Response
     return;
   } finally {
     client.release();
+  }
+  } catch (err) {
+    res.status(500).json({ errors: [String(err)] });
   }
 });
 
