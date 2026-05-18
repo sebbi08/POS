@@ -9,4 +9,10 @@ export default defineConfig({
     setupFiles: ["src/tests/setup.ts"],
     css: false,
   },
+  resolve: {
+    alias: {
+      "@point-of-sale/webusb-receipt-printer": __dirname + "/src/tests/__mocks__/webusb-stub.ts",
+      "@point-of-sale/receipt-printer-encoder": __dirname + "/src/tests/__mocks__/encoder-stub.ts",
+    },
+  },
 });

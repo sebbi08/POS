@@ -122,12 +122,10 @@ test.describe("POS Terminal Flow", () => {
     await expect(page.getByText(/Order #/)).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Espresso")).toHaveCount(2); // one in grid, one in order panel
 
-    // Reload the page
+    // Reload the page (stays on /pos/:terminalId, order should rehydrate)
     await page.reload();
     await page.waitForTimeout(2000); // let projections catch up
 
-    // Select terminal again and verify order is still there
-    await page.getByRole("button", { name: terminalName }).click();
     await expect(page.getByText(/Order #/)).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Espresso")).toHaveCount(2); // should still have item
 

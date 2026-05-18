@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 
 interface Terminal {
@@ -7,12 +8,8 @@ interface Terminal {
   groupIds: string[];
 }
 
-interface Props {
-  onEnterPOS: (terminalId: string, terminalName: string) => void;
-  onEnterAdmin: () => void;
-}
-
-function Login({ onEnterPOS, onEnterAdmin }: Props) {
+function Login() {
+  const navigate = useNavigate();
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [showPin, setShowPin] = useState(false);
   const [pin, setPin] = useState("");
@@ -36,7 +33,7 @@ function Login({ onEnterPOS, onEnterAdmin }: Props) {
     try {
       await api.post("/auth/login", { pin });
       api.setAdminPin(pin);
-      onEnterAdmin();
+      navigate("/admin");
     } catch {
       setError("Invalid PIN");
       setPin("");
@@ -109,7 +106,7 @@ function Login({ onEnterPOS, onEnterAdmin }: Props) {
           {terminals.map((t) => (
             <button
               key={t.id}
-              onClick={() => onEnterPOS(t.id, t.name)}
+              onClick={() => navigate(`/pos/${t.id}`)}
               className="bg-gray-700 hover:bg-gray-600 text-white rounded-xl p-4 text-center transition-colors"
             >
               <div className="text-lg font-semibold">{t.name}</div>

@@ -1,13 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import type { Session } from "../App";
 import ItemGrid from "../components/ItemGrid";
 import OrderPanel from "../components/OrderPanel";
+import PrinterSettings from "../components/PrinterSettings";
 
 interface TerminalItem {
   id: string;
   name: string;
   price: number;
+}
+
+interface TerminalInfo {
+  id: string;
+  name: string;
 }
 
 interface Order {
@@ -16,18 +22,21 @@ interface Order {
   items: { itemId: string; name: string; qty: number; unitPrice: number; total: number }[];
 }
 
-interface Props {
-  session: Session & { type: "pos" };
-  onLogout: () => void;
-}
-
-function POSLayout({ session, onLogout }: Props) {
-  const terminalId = session.terminalId;
+function POSLayout() {
+  const { terminalId } = useParams<{ terminalId: string }>();
+  const navigate = useNavigate();
+  const [terminalName, setTerminalName] = useState("");
   const [items, setItems] = useState<TerminalItem[]>([]);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadItems = useCallback(async () => {
+  const loadData = useCallback(async () => {
+    if (!terminalId) return;
+
+    const terminals = await api.get<TerminalInfo[]>("/terminals");
+    const terminal = terminals.find((t) => t.id === terminalId);
+    if (terminal) setTerminalName(terminal.name);
+
     const items = await api.get<TerminalItem[]>(`/terminals/${terminalId}/items`);
     setItems(items);
 
@@ -38,9 +47,10 @@ function POSLayout({ session, onLogout }: Props) {
     setLoading(false);
   }, [terminalId]);
 
-  useEffect(() => { loadItems(); }, [loadItems]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleAddItem = async (itemId: string) => {
+    if (!terminalId) return;
     let order = currentOrder;
     if (!order) {
       try {
@@ -70,7 +80,7 @@ function POSLayout({ session, onLogout }: Props) {
   };
 
   const handleIncreaseQty = async (itemId: string) => {
-    if (!currentOrder) return;
+    if (!currentOrder || !terminalId) return;
     await api.post(`/orders/${currentOrder.id}/items`, { itemId, qty: 1 });
     const orders = await api.get<Order[]>(`/orders?terminalId=${terminalId}`);
     const updated = orders.find((o) => o.id === currentOrder.id);
@@ -78,7 +88,7 @@ function POSLayout({ session, onLogout }: Props) {
   };
 
   const handleDecreaseQty = async (itemId: string) => {
-    if (!currentOrder) return;
+    if (!currentOrder || !terminalId) return;
     await api.post(`/orders/${currentOrder.id}/items`, { itemId, qty: -1 });
     const orders = await api.get<Order[]>(`/orders?terminalId=${terminalId}`);
     const updated = orders.find((o) => o.id === currentOrder.id);
@@ -86,7 +96,7 @@ function POSLayout({ session, onLogout }: Props) {
   };
 
   const handleRemoveItem = async (itemId: string) => {
-    if (!currentOrder) return;
+    if (!currentOrder || !terminalId) return;
     await api.delete(`/orders/${currentOrder.id}/items/${itemId}`);
     const orders = await api.get<Order[]>(`/orders?terminalId=${terminalId}`);
     const updated = orders.find((o) => o.id === currentOrder.id);
@@ -112,6 +122,10 @@ function POSLayout({ session, onLogout }: Props) {
     setCurrentOrder(null);
   };
 
+  const handleExit = () => {
+    navigate("/");
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
@@ -124,11 +138,12 @@ function POSLayout({ session, onLogout }: Props) {
     <div className="min-h-screen flex flex-col">
       <header className="bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-700">
         <div className="flex items-center gap-4">
-          <h1 className="text-white font-bold text-lg">{session.terminalName}</h1>
+          <h1 className="text-white font-bold text-lg">{terminalName}</h1>
         </div>
         <div className="flex items-center gap-3">
+          <PrinterSettings />
           <button
-            onClick={onLogout}
+            onClick={handleExit}
             className="bg-red-600 hover:bg-red-500 text-white text-sm px-3 py-1 rounded"
           >
             Exit

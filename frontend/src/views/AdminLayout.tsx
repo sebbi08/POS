@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import CatalogManager from "../components/CatalogManager";
 import CompanySettings from "../components/CompanySettings";
 import TerminalConfig from "../components/TerminalConfig";
@@ -16,11 +17,8 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "transactions", label: "Transactions" },
 ];
 
-interface Props {
-  onLogout: () => void;
-}
-
-function AdminLayout({ onLogout }: Props) {
+function AdminLayout() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("daily");
 
   return (
@@ -46,7 +44,7 @@ function AdminLayout({ onLogout }: Props) {
         </div>
         <div className="p-3 border-t border-gray-700">
           <button
-            onClick={onLogout}
+            onClick={() => navigate("/")}
             className="w-full bg-red-600 hover:bg-red-500 text-white rounded-lg py-2 text-sm"
           >
             Logout
