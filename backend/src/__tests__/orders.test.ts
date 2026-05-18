@@ -48,7 +48,7 @@ describe("Orders Commands", () => {
 });
 
 describe("Orders Projections", () => {
-  it("processes full order lifecycle: open → add → pay → close", () => {
+  it("processes full order lifecycle: open → add → close", () => {
     orders.clear();
     initOrderProjections();
     const handler = vi.mocked(registerProjection).mock.calls[0][2];
@@ -59,12 +59,9 @@ describe("Orders Projections", () => {
     handler({ type: "ItemAdded", data: { orderId: "o1", itemId: "i1", name: "Espresso", qty: 1, unitPrice: 2.50, vatRate: 19, vatAmount: 0.40, total: 2.50 } }, "order-o1");
     expect(orders.get("o1")!.items).toHaveLength(1);
 
-    handler({ type: "OrderPaid", data: { orderId: "o1", totalGross: 2.50, totalVat: { "19": 0.40 }, totalNet: 2.10 } }, "order-o1");
-    expect(orders.get("o1")!.status).toBe("paid");
-    expect(orders.get("o1")!.totalGross).toBe(2.50);
-
-    handler({ type: "OrderClosed", data: { orderId: "o1" } }, "order-o1");
+    handler({ type: "OrderClosed", data: { orderId: "o1", totalGross: 2.50, totalVat: { "19": 0.40 }, totalNet: 2.10 } }, "order-o1");
     expect(orders.get("o1")!.status).toBe("closed");
+    expect(orders.get("o1")!.totalGross).toBe(2.50);
   });
 
   it("OrderCancellationCreated creates cancellation order and links original", () => {
@@ -73,7 +70,7 @@ describe("Orders Projections", () => {
     const handler = vi.mocked(registerProjection).mock.calls[0][2];
 
     handler({ type: "OrderOpened", data: { id: "o1", terminalId: "t1" } }, "order-o1");
-    handler({ type: "OrderClosed", data: { orderId: "o1" } }, "order-o1");
+    handler({ type: "OrderClosed", data: { orderId: "o1", totalGross: 2.50, totalVat: { "19": 0.40 }, totalNet: 2.10 } }, "order-o1");
 
     handler({
       type: "OrderCancellationCreated",
@@ -103,7 +100,7 @@ describe("Orders Projections", () => {
 
     handler({ type: "OrderOpened", data: { id: "o1", terminalId: "bar" } }, "order-o1");
     handler({ type: "OrderOpened", data: { id: "o2", terminalId: "kitchen" } }, "order-o2");
-    handler({ type: "OrderClosed", data: { orderId: "o2" } }, "order-o2");
+    handler({ type: "OrderClosed", data: { orderId: "o2", totalGross: 0, totalVat: {}, totalNet: 0 } }, "order-o2");
 
     const barOrders = getOpenOrdersByTerminal("bar");
     expect(barOrders).toHaveLength(1);

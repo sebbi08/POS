@@ -21,42 +21,36 @@ export function initReportingProjections(): void {
   registerProjection("reporting", "order", (event) => {
     switch (event.type) {
       case "OrderClosed": {
-        const orderId = event.data.orderId as string;
+        const data = event.data;
+        const orderId = data.orderId as string;
         const order = ordersMap.get(orderId);
         if (order && !order.cancelsOrderId) {
           const existingIdx = transactionHistory.findIndex((t) => t.orderId === orderId);
           if (existingIdx >= 0) {
-            transactionHistory[existingIdx].status = "closed";
-            transactionHistory[existingIdx].closedAt = new Date().toISOString();
+            transactionHistory[existingIdx] = {
+              ...transactionHistory[existingIdx],
+              totalGross: data.totalGross as number,
+              totalVat: Object.values(data.totalVat as Record<number, number>).reduce((a: number, b: number) => a + b, 0),
+              status: "closed",
+              closedAt: new Date().toISOString(),
+            };
+          } else {
+            const itemsText = order.items
+              .map((i: { qty: number; name: string }) => `${i.qty}x ${i.name}`)
+              .join(", ");
+
+            transactionHistory.push({
+              orderId,
+              terminalId: order.terminalId,
+              items: itemsText,
+              itemCount: order.items.length,
+              totalGross: data.totalGross as number,
+              totalVat: Object.values(data.totalVat as Record<number, number>).reduce((a: number, b: number) => a + b, 0),
+              status: "closed",
+              closedAt: new Date().toISOString(),
+            });
           }
           dailyReport.orderCount++;
-        }
-        break;
-      }
-      case "OrderPaid": {
-        const data = event.data;
-        const orderId = data.orderId as string;
-        const order = ordersMap.get(orderId);
-
-        if (order) {
-          const itemsText = order.items
-            .map((i: { qty: number; name: string }) => `${i.qty}x ${i.name}`)
-            .join(", ");
-
-          const totalVat = Object.values(
-            data.totalVat as Record<number, number>
-          ).reduce((a: number, b: number) => a + b, 0);
-
-          transactionHistory.push({
-            orderId,
-            terminalId: order.terminalId,
-            items: itemsText,
-            itemCount: order.items.length,
-            totalGross: data.totalGross as number,
-            totalVat,
-            status: "paid",
-            closedAt: new Date().toISOString(),
-          });
         }
         break;
       }

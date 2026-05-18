@@ -1,4 +1,4 @@
-export type OrderStatus = "open" | "paid" | "closed";
+export type OrderStatus = "open" | "closed";
 
 export interface OrderItem {
   itemId: string;
@@ -56,15 +56,11 @@ export interface FinalReceiptPrintedEvent {
   orderId: string;
 }
 
-export interface OrderPaidEvent {
+export interface OrderClosedEvent {
   orderId: string;
   totalGross: number;
   totalVat: Record<number, number>;
   totalNet: number;
-}
-
-export interface OrderClosedEvent {
-  orderId: string;
 }
 
 export interface OrderCancellationCreatedEvent {

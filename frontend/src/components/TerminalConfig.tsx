@@ -16,6 +16,7 @@ function TerminalConfig() {
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [groups, setGroups] = useState<ItemGroup[]>([]);
   const [form, setForm] = useState({ name: "", groupIds: [] as string[] });
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = () => {
     api.get<Terminal[]>("/terminals").then(setTerminals);
@@ -23,6 +24,16 @@ function TerminalConfig() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const resetForm = () => {
+    setForm({ name: "", groupIds: [] });
+    setEditingId(null);
+  };
+
+  const startEdit = (t: Terminal) => {
+    setEditingId(t.id);
+    setForm({ name: t.name, groupIds: [...t.groupIds] });
+  };
 
   return (
     <div>
@@ -58,19 +69,43 @@ function TerminalConfig() {
               </button>
             ))}
           </div>
-          <button
-            onClick={async () => {
-              await api.post("/terminals", {
-                name: form.name,
-                groupIds: form.groupIds,
-              });
-              setForm({ name: "", groupIds: [] });
-              load();
-            }}
-            className="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 py-2 text-sm"
-          >
-            Add
-          </button>
+          {editingId ? (
+            <>
+              <button
+                onClick={async () => {
+                  await api.put(`/terminals/${editingId}`, {
+                    name: form.name,
+                    groupIds: form.groupIds,
+                  });
+                  resetForm();
+                  load();
+                }}
+                className="bg-green-600 hover:bg-green-500 text-white rounded px-3 py-2 text-sm"
+              >
+                Save
+              </button>
+              <button
+                onClick={resetForm}
+                className="bg-gray-600 hover:bg-gray-500 text-white rounded px-3 py-2 text-sm"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={async () => {
+                await api.post("/terminals", {
+                  name: form.name,
+                  groupIds: form.groupIds,
+                });
+                resetForm();
+                load();
+              }}
+              className="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 py-2 text-sm"
+            >
+              Add
+            </button>
+          )}
         </div>
       </div>
 
@@ -89,12 +124,20 @@ function TerminalConfig() {
                   .join(", ")}
               </div>
             </div>
-            <button
-              onClick={() => api.delete(`/terminals/${t.id}`).then(load)}
-              className="text-red-400 hover:text-red-300 text-sm"
-            >
-              Delete
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => startEdit(t)}
+                className="text-blue-400 hover:text-blue-300 text-sm"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => api.delete(`/terminals/${t.id}`).then(load)}
+                className="text-red-400 hover:text-red-300 text-sm"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         ))}
       </div>

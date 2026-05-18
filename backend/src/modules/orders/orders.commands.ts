@@ -5,7 +5,6 @@ import {
   ItemAddedEvent,
   ItemRemovedEvent,
   FinalReceiptPrintedEvent,
-  OrderPaidEvent,
   OrderClosedEvent,
   OrderCancellationCreatedEvent,
 } from "./orders.types";
@@ -56,7 +55,7 @@ export async function printFinalReceipt(orderId: string): Promise<void> {
   await appendOrderEvent(STREAM(orderId), "FinalReceiptPrinted", data as unknown as Record<string, unknown>);
 }
 
-export async function payOrder(orderId: string): Promise<void> {
+export async function closeOrder(orderId: string): Promise<void> {
   const { orders } = require("./orders.projections");
   const order = orders.get(orderId);
   if (!order) throw new Error(`Order ${orderId} not found`);
@@ -69,7 +68,7 @@ export async function payOrder(orderId: string): Promise<void> {
   }
   const totalNet = totalGross - Object.values(totalVat).reduce((a, b) => a + b, 0);
 
-  const data: OrderPaidEvent = {
+  const data: OrderClosedEvent = {
     orderId,
     totalGross: Math.round(totalGross * 100) / 100,
     totalVat: Object.fromEntries(
@@ -77,11 +76,6 @@ export async function payOrder(orderId: string): Promise<void> {
     ),
     totalNet: Math.round(totalNet * 100) / 100,
   };
-  await appendOrderEvent(STREAM(orderId), "OrderPaid", data as unknown as Record<string, unknown>);
-}
-
-export async function closeOrder(orderId: string): Promise<void> {
-  const data: OrderClosedEvent = { orderId };
   await appendOrderEvent(STREAM(orderId), "OrderClosed", data as unknown as Record<string, unknown>);
 }
 

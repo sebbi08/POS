@@ -22,6 +22,7 @@ function CatalogManager({ type }: Props) {
   const [groups, setGroups] = useState<ItemGroup[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -43,6 +44,21 @@ function CatalogManager({ type }: Props) {
     price: "",
     groupId: "",
   });
+
+  const resetForm = () => {
+    setForm({ name: "", vatRate: "19", price: "", groupId: "" });
+    setEditingId(null);
+  };
+
+  const startEdit = (id: string, name: string, vatRate?: number, price?: number, groupId?: string) => {
+    setEditingId(id);
+    setForm({
+      name,
+      vatRate: vatRate !== undefined ? String(vatRate) : "19",
+      price: price !== undefined ? String(price) : "",
+      groupId: groupId || "",
+    });
+  };
 
   if (loading) return <div className="text-gray-400">Loading...</div>;
 
@@ -69,19 +85,43 @@ function CatalogManager({ type }: Props) {
                 value={form.vatRate}
                 onChange={(e) => setForm({ ...form, vatRate: e.target.value })}
               />
-              <button
-                onClick={async () => {
-                  await api.post("/catalog/groups", {
-                    name: form.name,
-                    vatRate: parseFloat(form.vatRate),
-                  });
-                  setForm({ ...form, name: "", vatRate: "19" });
-                  load();
-                }}
-                className="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 py-2 text-sm"
-              >
-                Add
-              </button>
+              {editingId ? (
+                <>
+                  <button
+                    onClick={async () => {
+                      await api.put(`/catalog/groups/${editingId}`, {
+                        name: form.name,
+                        vatRate: parseFloat(form.vatRate),
+                      });
+                      resetForm();
+                      load();
+                    }}
+                    className="bg-green-600 hover:bg-green-500 text-white rounded px-3 py-2 text-sm"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={resetForm}
+                    className="bg-gray-600 hover:bg-gray-500 text-white rounded px-3 py-2 text-sm"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={async () => {
+                    await api.post("/catalog/groups", {
+                      name: form.name,
+                      vatRate: parseFloat(form.vatRate),
+                    });
+                    resetForm();
+                    load();
+                  }}
+                  className="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 py-2 text-sm"
+                >
+                  Add
+                </button>
+              )}
             </div>
           </div>
           <table className="w-full text-sm">
@@ -98,6 +138,12 @@ function CatalogManager({ type }: Props) {
                   <td className="text-white py-2">{g.name}</td>
                   <td className="text-white text-right py-2">{g.vatRate}%</td>
                   <td className="text-right py-2">
+                    <button
+                      onClick={() => startEdit(g.id, g.name, g.vatRate)}
+                      className="text-blue-400 hover:text-blue-300 text-xs mr-2"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => api.delete(`/catalog/groups/${g.id}`).then(load)}
                       className="text-red-400 hover:text-red-300 text-xs"
@@ -142,21 +188,47 @@ function CatalogManager({ type }: Props) {
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
               />
-              <button
-                onClick={async () => {
-                  await api.post("/catalog/items", {
-                    name: form.name,
-                    groupId: form.groupId,
-                    price: parseFloat(form.price),
-                  });
-                  setForm({ ...form, name: "", groupId: "", price: "" });
-                  load();
-                }}
-                className="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 py-2 text-sm"
-                disabled={!form.groupId}
-              >
-                Add
-              </button>
+              {editingId ? (
+                <>
+                  <button
+                    onClick={async () => {
+                      await api.put(`/catalog/items/${editingId}`, {
+                        name: form.name,
+                        groupId: form.groupId,
+                        price: parseFloat(form.price),
+                      });
+                      resetForm();
+                      load();
+                    }}
+                    disabled={!form.groupId}
+                    className="bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white rounded px-3 py-2 text-sm"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={resetForm}
+                    className="bg-gray-600 hover:bg-gray-500 text-white rounded px-3 py-2 text-sm"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={async () => {
+                    await api.post("/catalog/items", {
+                      name: form.name,
+                      groupId: form.groupId,
+                      price: parseFloat(form.price),
+                    });
+                    resetForm();
+                    load();
+                  }}
+                  disabled={!form.groupId}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded px-3 py-2 text-sm"
+                >
+                  Add
+                </button>
+              )}
             </div>
           </div>
           <table className="w-full text-sm">
@@ -179,6 +251,12 @@ function CatalogManager({ type }: Props) {
                     {item.price.toFixed(2)}€
                   </td>
                   <td className="text-right py-2">
+                    <button
+                      onClick={() => startEdit(item.id, item.name, undefined, item.price, item.groupId)}
+                      className="text-blue-400 hover:text-blue-300 text-xs mr-2"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => api.delete(`/catalog/items/${item.id}`).then(load)}
                       className="text-red-400 hover:text-red-300 text-xs"

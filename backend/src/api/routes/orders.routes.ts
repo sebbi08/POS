@@ -4,7 +4,6 @@ import {
   addItemToOrder,
   removeItemFromOrder,
   printFinalReceipt,
-  payOrder,
   closeOrder,
   cancelOrder,
 } from "../../modules/orders/orders.commands";
@@ -64,10 +63,6 @@ router.post("/:id/print", (req: Request, res: Response): void => {
     generateCombinedReceiptPdf(req.params.id);
     res.json({ status: "printed" });
   });
-});
-
-router.post("/:id/pay", (req: Request, res: Response): void => {
-  payOrder(req.params.id).then(() => res.json({ status: "paid" }));
 });
 
 router.post("/:id/close", (req: Request, res: Response): void => {

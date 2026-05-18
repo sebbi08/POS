@@ -111,7 +111,6 @@ function POSLayout() {
 
   const handlePayAndClose = async () => {
     if (!currentOrder) return;
-    await api.post(`/orders/${currentOrder.id}/pay`);
     await api.post(`/orders/${currentOrder.id}/close`);
     setCurrentOrder(null);
   };

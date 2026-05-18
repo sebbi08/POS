@@ -61,21 +61,14 @@ export function initOrderProjections(): void {
         if (order) order.pickupSeq++;
         break;
       }
-      case "OrderPaid": {
+      case "OrderClosed": {
         const data = event.data;
         const order = orders.get(data.orderId as string);
         if (order) {
-          order.status = "paid" as OrderStatus;
+          order.status = "closed" as OrderStatus;
           order.totalGross = data.totalGross as number;
           order.totalVat = data.totalVat as Record<number, number>;
           order.totalNet = data.totalNet as number;
-        }
-        break;
-      }
-      case "OrderClosed": {
-        const order = orders.get(event.data.orderId as string);
-        if (order) {
-          order.status = "closed" as OrderStatus;
           order.closedAt = new Date();
         }
         break;
