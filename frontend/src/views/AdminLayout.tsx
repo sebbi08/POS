@@ -5,8 +5,9 @@ import CompanySettings from "../components/CompanySettings";
 import TerminalConfig from "../components/TerminalConfig";
 import DailyOverview from "../components/DailyOverview";
 import TransactionHistory from "../components/TransactionHistory";
+import CatalogImportExport from "../components/CatalogImportExport";
 
-type Tab = "groups" | "items" | "terminals" | "company" | "daily" | "transactions";
+type Tab = "groups" | "items" | "terminals" | "company" | "daily" | "transactions" | "import-export";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "groups", label: "Item Groups" },
@@ -15,6 +16,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "company", label: "Company" },
   { id: "daily", label: "Daily Overview" },
   { id: "transactions", label: "Transactions" },
+  { id: "import-export", label: "Import/Export" },
 ];
 
 function AdminLayout() {
@@ -58,6 +60,7 @@ function AdminLayout() {
         {tab === "company" && <CompanySettings />}
         {tab === "daily" && <DailyOverview />}
         {tab === "transactions" && <TransactionHistory />}
+        {tab === "import-export" && <CatalogImportExport />}
       </main>
     </div>
   );
