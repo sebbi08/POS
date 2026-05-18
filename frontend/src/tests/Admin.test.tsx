@@ -21,6 +21,8 @@ vi.mock("../api/client", () => ({
     post: vi.fn().mockResolvedValue({ id: "new-id" }),
     put: vi.fn().mockResolvedValue({ status: "updated" }),
     delete: vi.fn().mockResolvedValue({ status: "deleted" }),
+    upload: vi.fn().mockResolvedValue({}),
+    downloadCsv: vi.fn().mockResolvedValue(undefined),
     clearAdminPin: vi.fn(),
   },
 }));
@@ -96,6 +98,11 @@ describe("AdminLayout", () => {
     fireEvent.click(screen.getByText("Logout"));
     // Navigation happens via useNavigate; presence of button is sufficient test
     expect(screen.getByText("Logout")).toBeInTheDocument();
+  });
+
+  it("renders Import/Export tab", () => {
+    render(<MemoryRouter><AdminLayout /></MemoryRouter>);
+    expect(screen.getByText("Import/Export")).toBeInTheDocument();
   });
 });
 
