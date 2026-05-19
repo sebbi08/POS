@@ -9,6 +9,7 @@ import {
 } from "../../modules/orders/orders.commands";
 import { orders, getOpenOrdersByTerminal } from "../../modules/orders/orders.projections";
 import { generateCombinedReceiptPdf } from "../../modules/receipts/receipts.pdf";
+import { getCompanySettings } from "../../modules/company/company.repository";
 import { getItem } from "../../modules/catalog/catalog.repository";
 import { getGroup } from "../../modules/catalog/catalog.repository";
 
@@ -58,10 +59,42 @@ router.delete("/:id/items/:itemId", (req: Request, res: Response): void => {
   );
 });
 
-router.post("/:id/print", (req: Request, res: Response): void => {
-  printFinalReceipt(req.params.id).then(() => {
-    generateCombinedReceiptPdf(req.params.id);
-    res.json({ status: "printed" });
+router.post("/:id/print", async (req: Request, res: Response): Promise<void> => {
+  await printFinalReceipt(req.params.id);
+  generateCombinedReceiptPdf(req.params.id);
+
+  const order = orders.get(req.params.id);
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+
+  const company = await getCompanySettings();
+
+  const totalGross = order.items.reduce((sum: number, i: { total: number }) => sum + i.total, 0);
+  const totalVat: Record<number, number> = {};
+  for (const item of order.items) {
+    totalVat[item.vatRate] =
+      (totalVat[item.vatRate] || 0) + item.vatAmount;
+  }
+
+  res.json({
+    status: "printed",
+    order: {
+      id: order.id,
+      items: order.items.map((i) => ({
+        name: i.name,
+        qty: i.qty,
+        total: i.total,
+        vatRate: i.vatRate,
+        vatAmount: i.vatAmount,
+      })),
+      totalGross: Math.round(totalGross * 100) / 100,
+      totalVat: Object.fromEntries(
+        Object.entries(totalVat).map(([k, v]) => [k, Math.round((v as number) * 100) / 100])
+      ),
+    },
+    company,
   });
 });
 
