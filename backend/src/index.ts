@@ -14,6 +14,10 @@ import terminalsRoutes from "./api/routes/terminals.routes";
 import reportingRoutes from "./api/routes/reporting.routes";
 import companyRoutes from "./api/routes/company.routes";
 
+const startupLog = (msg: string) => console.log(`[backend:startup] ${msg}  (${new Date().toISOString()})`);
+
+startupLog(`Database URL: ${config.pg.connectionString.replace(/\/\/.*@/, "//***@")}`);
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -29,14 +33,28 @@ app.use("/api/terminals", terminalsRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api/company", companyRoutes);
 
+startupLog("Registering projections…");
+const projStart = Date.now();
 initAuthProjections();
 initOrderProjections();
 initReportingProjections();
+startupLog(`  Projections registered in ${Date.now() - projStart}ms`);
 
+startupLog("Initializing database tables…");
+const tableStart = Date.now();
 initTables().then(() => {
+  startupLog(`  Tables ready in ${Date.now() - tableStart}ms`);
+
+  startupLog("Replaying events and starting projections…");
+  const replayStart = Date.now();
   startProjections().then(() => {
+    startupLog(`  Projections live in ${Date.now() - replayStart}ms`);
+
     app.listen(config.port, () => {
-      console.log(`POS backend running on http://localhost:${config.port}`);
+      const total = Date.now() - t0;
+      startupLog(`Listening on http://localhost:${config.port}  (total startup ${total}ms)`);
     });
   });
 });
+
+const t0 = Date.now();

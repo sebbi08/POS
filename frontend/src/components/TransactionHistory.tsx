@@ -17,6 +17,7 @@ function TransactionHistory() {
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [terminal, setTerminal] = useState("");
+  const [cancelling, setCancelling] = useState<string | null>(null);
 
   const load = () => {
     const params = new URLSearchParams();
@@ -27,6 +28,23 @@ function TransactionHistory() {
   };
 
   useEffect(() => { load(); }, [status, search, terminal]);
+
+  const handleCancel = async (orderId: string) => {
+    setCancelling(orderId);
+    try {
+      await api.post(`/orders/${orderId}/cancel`, { reason: "Cancelled from admin" });
+      load();
+    } finally {
+      setCancelling(null);
+    }
+  };
+
+  const statusBadge = (s: string) => {
+    const base = "px-2 py-0.5 rounded text-xs font-semibold";
+    if (s === "cancelled") return `${base} bg-red-600 text-white`;
+    if (s === "open") return `${base} bg-amber-500 text-black`;
+    return `${base} bg-green-600 text-white`;
+  };
 
   return (
     <div>
@@ -45,6 +63,7 @@ function TransactionHistory() {
           onChange={(e) => setStatus(e.target.value)}
         >
           <option value="all">All Status</option>
+          <option value="open">Open</option>
           <option value="closed">Closed</option>
           <option value="cancelled">Cancelled</option>
         </select>
@@ -66,6 +85,7 @@ function TransactionHistory() {
             <th className="text-left py-2">Status</th>
             <th className="text-left py-2">Title</th>
             <th className="text-left py-2">Closed</th>
+            <th className="text-left py-2"></th>
           </tr>
         </thead>
         <tbody>
@@ -73,7 +93,7 @@ function TransactionHistory() {
             <tr
               key={t.orderId}
               className={`border-b border-gray-800 ${
-                t.status === "cancelled" ? "line-through text-red-400" : "text-white"
+                t.status === "cancelled" ? "line-through text-red-400" : t.status === "open" ? "text-amber-200" : "text-white"
               }`}
             >
               <td className="py-2">{t.orderId.slice(0, 8)}</td>
@@ -81,13 +101,7 @@ function TransactionHistory() {
               <td className="py-2">{t.items}</td>
               <td className="py-2 text-right">{t.totalGross.toFixed(2)}€</td>
               <td className="py-2">
-                <span
-                  className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                    t.status === "cancelled"
-                      ? "bg-red-600 text-white"
-                      : "bg-green-600 text-white"
-                  }`}
-                >
+                <span className={statusBadge(t.status)}>
                   {t.status}
                 </span>
               </td>
@@ -96,6 +110,17 @@ function TransactionHistory() {
               </td>
               <td className="py-2 text-gray-500 text-xs">
                 {t.closedAt ? new Date(t.closedAt).toLocaleTimeString("de-DE") : ""}
+              </td>
+              <td className="py-2">
+                {t.status === "open" && (
+                  <button
+                    onClick={() => handleCancel(t.orderId)}
+                    disabled={cancelling === t.orderId}
+                    className="bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white text-xs px-2 py-1 rounded"
+                  >
+                    {cancelling === t.orderId ? "..." : "Cancel"}
+                  </button>
+                )}
               </td>
             </tr>
           ))}

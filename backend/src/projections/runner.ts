@@ -23,12 +23,15 @@ export function registerProjection(
 
 export async function startProjections(): Promise<void> {
   if (subscriptions.length === 0) {
-    console.log("No projections registered.");
+    console.log("[backend:projections] No projections registered.");
     return;
   }
 
-  console.log("Replaying order events...");
+  console.log(`[backend:projections] Replaying order events for ${subscriptions.length} projection(s): ${subscriptions.map((s) => s.name).join(", ")}…`);
+  let eventCount = 0;
+  const t0 = Date.now();
   await replayOrderEvents(async (event) => {
+    eventCount++;
     const { streamId } = event;
     for (const sub of subscriptions) {
       if (streamId.startsWith(`${sub.prefix}-`)) {
@@ -38,7 +41,7 @@ export async function startProjections(): Promise<void> {
   });
 
   console.log(
-    `Projections started: ${subscriptions.map((s) => s.name).join(", ")}`
+    `[backend:projections]  Replayed ${eventCount} events in ${Date.now() - t0}ms`
   );
 
   subscribeToOrderEvents((event) => {

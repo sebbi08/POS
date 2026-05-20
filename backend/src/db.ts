@@ -17,7 +17,10 @@ let tablesInitialized = false;
 
 export async function initTables(): Promise<void> {
   if (tablesInitialized) return;
+  const dbLog = (msg: string) => console.log(`[backend:db] ${msg}  (${new Date().toISOString()})`);
+  const t0 = Date.now();
   const client = await getPool().connect();
+  dbLog(`Connected to PostgreSQL in ${Date.now() - t0}ms`);
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS item_groups (
@@ -57,6 +60,7 @@ export async function initTables(): Promise<void> {
       );
     `);
     tablesInitialized = true;
+    console.log(`[backend:db]  Tables created/verified in ${Date.now() - t0}ms`);
   } finally {
     client.release();
   }

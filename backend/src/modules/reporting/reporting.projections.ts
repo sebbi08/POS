@@ -15,7 +15,7 @@ export const dailyReport: DailyReport = {
   topItems: [],
 };
 
-const itemCounts: Map<string, { name: string; count: number }> = new Map();
+export const itemCounts: Map<string, { name: string; count: number }> = new Map();
 
 export function initReportingProjections(): void {
   registerProjection("reporting", "order", (event) => {
@@ -25,13 +25,17 @@ export function initReportingProjections(): void {
         const orderId = data.orderId as string;
         const order = ordersMap.get(orderId);
         if (order && !order.cancelsOrderId) {
+          const totalVatValue = Object.values(data.totalVat as Record<number, number>).reduce((a: number, b: number) => a + b, 0);
+          const cancelled = data.cancelled as boolean | undefined;
+          const status = cancelled ? "cancelled" : "closed";
+
           const existingIdx = transactionHistory.findIndex((t) => t.orderId === orderId);
           if (existingIdx >= 0) {
             transactionHistory[existingIdx] = {
               ...transactionHistory[existingIdx],
               totalGross: data.totalGross as number,
-              totalVat: Object.values(data.totalVat as Record<number, number>).reduce((a: number, b: number) => a + b, 0),
-              status: "closed",
+              totalVat: totalVatValue,
+              status,
               closedAt: new Date().toISOString(),
             };
           } else {
@@ -45,12 +49,34 @@ export function initReportingProjections(): void {
               items: itemsText,
               itemCount: order.items.length,
               totalGross: data.totalGross as number,
-              totalVat: Object.values(data.totalVat as Record<number, number>).reduce((a: number, b: number) => a + b, 0),
-              status: "closed",
+              totalVat: totalVatValue,
+              status,
               closedAt: new Date().toISOString(),
             });
           }
-          dailyReport.orderCount++;
+
+          if (!cancelled) {
+            dailyReport.orderCount++;
+            dailyReport.totalGross += data.totalGross as number;
+            dailyReport.totalVat += totalVatValue;
+            dailyReport.totalNet += data.totalNet as number;
+
+            for (const item of order.items) {
+              const rateKey = String(item.vatRate);
+              if (!dailyReport.vatByGroup[rateKey]) {
+                dailyReport.vatByGroup[rateKey] = { rate: item.vatRate, gross: 0, vat: 0 };
+              }
+              dailyReport.vatByGroup[rateKey].gross += item.total;
+              dailyReport.vatByGroup[rateKey].vat += item.vatAmount;
+            }
+
+            const tid = order.terminalId;
+            if (!dailyReport.byTerminal[tid]) {
+              dailyReport.byTerminal[tid] = { orderCount: 0, total: 0 };
+            }
+            dailyReport.byTerminal[tid].orderCount++;
+            dailyReport.byTerminal[tid].total += data.totalGross as number;
+          }
         }
         break;
       }
@@ -79,12 +105,53 @@ export function initReportingProjections(): void {
           });
 
           dailyReport.cancelledCount++;
+
+          const origTx = transactionHistory.find((t) => t.orderId === cancelsOrderId);
+          if (origTx && origTx.status !== "cancelled") {
+            origTx.status = "cancelled";
+          }
+
+          const original = ordersMap.get(cancelsOrderId);
+          if (original) {
+            dailyReport.orderCount = Math.max(0, dailyReport.orderCount - 1);
+            dailyReport.totalGross -= original.totalGross;
+            dailyReport.totalVat -= Object.values(original.totalVat).reduce((a: number, b: number) => a + b, 0);
+            dailyReport.totalNet -= original.totalNet;
+
+            for (const item of original.items) {
+              const rateKey = String(item.vatRate);
+              if (dailyReport.vatByGroup[rateKey]) {
+                dailyReport.vatByGroup[rateKey].gross -= item.total;
+                dailyReport.vatByGroup[rateKey].vat -= item.vatAmount;
+              }
+            }
+
+            const tid = original.terminalId;
+            if (dailyReport.byTerminal[tid]) {
+              dailyReport.byTerminal[tid].orderCount = Math.max(0, dailyReport.byTerminal[tid].orderCount - 1);
+              dailyReport.byTerminal[tid].total -= original.totalGross;
+            }
+
+            for (const item of original.items) {
+              const existing = itemCounts.get(item.itemId);
+              if (existing) {
+                existing.count -= item.qty;
+                if (existing.count <= 0) {
+                  itemCounts.delete(item.itemId);
+                }
+              }
+            }
+          }
         }
         break;
       }
       case "ItemAdded": {
         const name = event.data.name as string;
         const itemId = event.data.itemId as string;
+        const orderId = event.data.orderId as string;
+        const order = ordersMap.get(orderId);
+        if (order && order.cancelsOrderId) break;
+
         const existing = itemCounts.get(itemId);
         if (existing) {
           existing.count += event.data.qty as number;

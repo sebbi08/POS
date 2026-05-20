@@ -61,6 +61,7 @@ export interface OrderClosedEvent {
   totalGross: number;
   totalVat: Record<number, number>;
   totalNet: number;
+  cancelled?: boolean;
 }
 
 export interface OrderCancellationCreatedEvent {

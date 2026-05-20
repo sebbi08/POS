@@ -4,6 +4,7 @@ import {
   OrderOpenedEvent,
   ItemAddedEvent,
   ItemRemovedEvent,
+  PickupReceiptPrintedEvent,
   FinalReceiptPrintedEvent,
   OrderClosedEvent,
   OrderCancellationCreatedEvent,
@@ -50,12 +51,17 @@ export async function removeItemFromOrder(
   await appendOrderEvent(STREAM(orderId), "ItemRemoved", data as unknown as Record<string, unknown>);
 }
 
+export async function printPickupReceipt(orderId: string, itemId: string): Promise<void> {
+  const data: PickupReceiptPrintedEvent = { orderId, itemId };
+  await appendOrderEvent(STREAM(orderId), "PickupReceiptPrinted", data as unknown as Record<string, unknown>);
+}
+
 export async function printFinalReceipt(orderId: string): Promise<void> {
   const data: FinalReceiptPrintedEvent = { orderId };
   await appendOrderEvent(STREAM(orderId), "FinalReceiptPrinted", data as unknown as Record<string, unknown>);
 }
 
-export async function closeOrder(orderId: string): Promise<void> {
+export async function closeOrder(orderId: string, opts?: { cancelled?: boolean }): Promise<void> {
   const { orders } = require("./orders.projections");
   const order = orders.get(orderId);
   if (!order) throw new Error(`Order ${orderId} not found`);
@@ -75,6 +81,7 @@ export async function closeOrder(orderId: string): Promise<void> {
       Object.entries(totalVat).map(([k, v]) => [k, Math.round(v * 100) / 100])
     ),
     totalNet: Math.round(totalNet * 100) / 100,
+    cancelled: opts?.cancelled,
   };
   await appendOrderEvent(STREAM(orderId), "OrderClosed", data as unknown as Record<string, unknown>);
 }
@@ -91,7 +98,7 @@ export async function cancelOrder(
 
   // Open orders: just close them (discard, no financial record needed)
   if (original.status === "open") {
-    await closeOrder(originalOrderId);
+    await closeOrder(originalOrderId, { cancelled: true });
     return "";
   }
 

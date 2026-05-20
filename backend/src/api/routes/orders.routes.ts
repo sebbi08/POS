@@ -3,6 +3,7 @@ import {
   openOrder,
   addItemToOrder,
   removeItemFromOrder,
+  printPickupReceipt,
   printFinalReceipt,
   closeOrder,
   cancelOrder,
@@ -61,13 +62,18 @@ router.delete("/:id/items/:itemId", (req: Request, res: Response): void => {
 
 router.post("/:id/print", async (req: Request, res: Response): Promise<void> => {
   await printFinalReceipt(req.params.id);
-  generateCombinedReceiptPdf(req.params.id);
 
   const order = orders.get(req.params.id);
   if (!order) {
     res.status(404).json({ error: "Order not found" });
     return;
   }
+
+  for (const item of order.items) {
+    await printPickupReceipt(order.id, item.itemId);
+  }
+
+  generateCombinedReceiptPdf(req.params.id);
 
   const company = await getCompanySettings();
 

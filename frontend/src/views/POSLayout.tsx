@@ -185,86 +185,129 @@ function POSLayout() {
       const { default: ReceiptPrinterEncoder } =
         await import("@point-of-sale/receipt-printer-encoder");
       const w = getPrintWidth(printerSettings.paperWidth);
-      const encoder = new ReceiptPrinterEncoder(getEncoderOptions(w));
       const { company, order: orderData } = result;
       const now = new Date().toLocaleString("de-DE");
       const line = "─".repeat(w);
 
-      encoder.initialize().newline();
+      const writeEncoder = async (encoder: any) => {
+        const paddedData = wrapPrintData(encoder.encode());
+        await device.transferOut(endpoint.endpointNumber, paddedData);
+      };
 
-      if (company.name) {
+      const printCompanyHeader = (encoder: any) => {
+        if (company.name) {
+          encoder
+            .align("center")
+            .bold(true)
+            .text(company.name)
+            .bold(false)
+            .newline();
+          if (company.address) encoder.text(company.address).newline();
+          if (company.city) encoder.text(company.city).newline();
+          if (company.vatId) encoder.text(`USt-ID: ${company.vatId}`).newline();
+          encoder.align("left");
+        }
+      };
+
+      // --- Final Receipt ---
+      {
+        const encoder = new ReceiptPrinterEncoder(getEncoderOptions(w));
+        encoder.initialize().newline();
+
+        printCompanyHeader(encoder);
+
+        encoder.newline().line(line).newline().newline();
         encoder
           .align("center")
           .bold(true)
-          .text(company.name)
+          .text("Final Receipt")
+          .bold(false)
+          .newline()
+          .newline();
+        encoder.align("left");
+
+        for (const item of orderData.items) {
+          const left = `${item.qty} x ${item.name}`;
+          const right = `${item.total.toFixed(2)} EUR`;
+          if (left.length + right.length + 1 <= w) {
+            const pad = w - left.length - right.length;
+            encoder.text(left + " ".repeat(pad) + right).newline();
+          } else {
+            encoder.text(`${item.qty}x ${item.name}`).newline();
+            encoder
+              .align("right")
+              .text(`${item.total.toFixed(2)}EUR`)
+              .align("left")
+              .newline();
+          }
+        }
+
+        encoder.newline().line(line).newline().newline();
+
+        const vatEntries = Object.entries(orderData.totalVat);
+        if (vatEntries.length > 0) {
+          for (const [rate, amount] of vatEntries) {
+            const left = `VAT ${rate}%:`;
+            const right = `${amount.toFixed(2)} EUR`;
+            const pad = w - left.length - right.length;
+            encoder.text(left + " ".repeat(Math.max(0, pad)) + right).newline();
+          }
+          encoder.newline().line(line).newline().newline();
+        }
+
+        encoder
+          .align("center")
+          .bold(true)
+          .text(`Total: ${orderData.totalGross.toFixed(2)} EUR`)
           .bold(false)
           .newline();
-        if (company.address) encoder.text(company.address).newline();
-        if (company.city) encoder.text(company.city).newline();
-        if (company.vatId) encoder.text(`USt-ID: ${company.vatId}`).newline();
         encoder.align("left");
+
+        encoder.newline().newline().newline().newline();
+        encoder.align("center");
+        encoder
+          .text(`Order #${orderData.id.slice(0, 8)} \u00b7 ${terminalId}`)
+          .newline();
+        encoder.text(now).newline();
+        encoder.align("left");
+
+        encoder.newline().newline().newline().newline().newline().cut();
+        await writeEncoder(encoder);
       }
 
-      encoder.newline().line(line).newline().newline();
-      encoder
-        .align("center")
-        .bold(true)
-        .text("Final Receipt")
-        .bold(false)
-        .newline()
-        .newline();
-      encoder.align("left");
+      // --- Pickup Receipts (one per item) ---
+      for (let i = 0; i < orderData.items.length; i++) {
+        const item = orderData.items[i];
+        const encoder = new ReceiptPrinterEncoder(getEncoderOptions(w));
+        encoder.initialize().newline();
 
-      for (const item of orderData.items) {
-        const left = `${item.qty} x ${item.name}`;
-        const right = `${item.total.toFixed(2)} EUR`;
-        if (left.length + right.length + 1 <= w) {
-          const pad = w - left.length - right.length;
-          encoder.text(left + " ".repeat(pad) + right).newline();
-        } else {
-          encoder.text(`${item.qty}x ${item.name}`).newline();
-          encoder
-            .align("right")
-            .text(`${item.total.toFixed(2)}EUR`)
-            .align("left")
-            .newline();
-        }
-      }
+        printCompanyHeader(encoder);
 
-      encoder.newline().line(line).newline().newline();
-
-      const vatEntries = Object.entries(orderData.totalVat);
-      if (vatEntries.length > 0) {
-        for (const [rate, amount] of vatEntries) {
-          const left = `VAT ${rate}%:`;
-          const right = `${amount.toFixed(2)} EUR`;
-          const pad = w - left.length - right.length;
-          encoder.text(left + " ".repeat(Math.max(0, pad)) + right).newline();
-        }
         encoder.newline().line(line).newline().newline();
+        encoder
+          .align("center")
+          .bold(true)
+          .text(`Pickup #${i + 1}`)
+          .bold(false)
+          .newline()
+          .newline();
+        encoder.align("left");
+
+        const left = `${item.qty} x ${item.name}`;
+        const pad = Math.max(0, (w - left.length) / 2);
+        encoder.text(" ".repeat(Math.floor(pad)) + left).newline();
+
+        encoder.newline().line(line).newline().newline();
+        encoder.align("center");
+        encoder
+          .text(`Order #${orderData.id.slice(0, 8)} \u00b7 ${terminalId}`)
+          .newline();
+        encoder.text(now).newline();
+        encoder.align("left");
+
+        encoder.newline().newline().newline().newline().cut();
+        await writeEncoder(encoder);
       }
-
-      encoder
-        .align("center")
-        .bold(true)
-        .text(`Total: ${orderData.totalGross.toFixed(2)} EUR`)
-        .bold(false)
-        .newline();
-      encoder.align("left");
-
-      encoder.newline().newline().newline().newline();
-      encoder.align("center");
-      encoder
-        .text(`Order #${orderData.id.slice(0, 8)} \u00b7 ${terminalId}`)
-        .newline();
-      encoder.text(now).newline();
-      encoder.align("left");
-
-      encoder.newline().newline().newline().newline().newline().newline().cut();
-      const data = encoder.encode();
-
-      const paddedData = wrapPrintData(data);
-      await device.transferOut(endpoint.endpointNumber, paddedData);
     } catch (err) {
       console.error("Print failed:", err);
     } finally {

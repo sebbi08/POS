@@ -86,13 +86,14 @@ test.describe("POS Terminal Flow", () => {
     await page.locator("button:has-text('Cappuccino')").first().click();
     await page.locator("button:has-text('Espresso')").first().click(); // second espresso
 
-    // Quantity shows 2 for Espresso (2 × 2.50€ = 5.00€)
-    await expect(page.getByText("× 2.50€")).toHaveCount(2);
+    // Items are grouped: Espresso qty=2 shows "× 2.50€" once, total 5.00€
+    await expect(page.getByText("× 2.50€")).toHaveCount(1);
     await expect(page.getByText("× 3.20€")).toHaveCount(1);
+    await expect(page.getByText("5.00€")).toBeVisible();
     await expect(page.getByText("8.20€")).toBeVisible();
 
     // Print combined receipt (final + pickups)
-    await page.getByRole("button", { name: "Print" }).click();
+    await page.getByRole("button", { name: "Print", exact: true }).click();
 
     // Pay and close
     await page.getByRole("button", { name: "Pay & Close" }).click();
