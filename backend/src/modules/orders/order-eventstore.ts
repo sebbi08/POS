@@ -1,4 +1,4 @@
-import { getPool } from "../../db";
+import { getPool } from "../../db.js";
 
 let tableInitialized = false;
 
@@ -25,14 +25,14 @@ async function initOrderEventsTable(): Promise<void> {
 export async function appendOrderEvent(
   streamId: string,
   eventType: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
 ): Promise<void> {
   await initOrderEventsTable();
   const client = await getPool().connect();
   try {
     await client.query(
       `INSERT INTO order_events (stream_id, event_type, data) VALUES ($1, $2, $3)`,
-      [streamId, eventType, JSON.stringify(data)]
+      [streamId, eventType, JSON.stringify(data)],
     );
     await client.query(`NOTIFY "${streamId}", '1'`);
     await client.query(`NOTIFY "order_events", '1'`);
@@ -42,12 +42,12 @@ export async function appendOrderEvent(
 }
 
 export async function readOrderStream<E = Record<string, unknown>>(
-  streamId: string
+  streamId: string,
 ): Promise<{ type: string; data: E; created: Date }[]> {
   await initOrderEventsTable();
   const result = await getPool().query(
     `SELECT event_type, data, created_at FROM order_events WHERE stream_id = $1 ORDER BY id ASC`,
-    [streamId]
+    [streamId],
   );
   return result.rows.map((row) => ({
     type: row.event_type,
@@ -57,7 +57,11 @@ export async function readOrderStream<E = Record<string, unknown>>(
 }
 
 export async function subscribeToOrderEvents(
-  handler: (event: { type: string; data: Record<string, unknown>; streamId: string }) => void
+  handler: (event: {
+    type: string;
+    data: Record<string, unknown>;
+    streamId: string;
+  }) => void,
 ): Promise<() => void> {
   await initOrderEventsTable();
   const client = await getPool().connect();
@@ -69,7 +73,7 @@ export async function subscribeToOrderEvents(
 
   client.on("notification", async () => {
     const result = await getPool().query(
-      `SELECT stream_id, event_type, data FROM order_events ORDER BY id DESC LIMIT 1`
+      `SELECT stream_id, event_type, data FROM order_events ORDER BY id DESC LIMIT 1`,
     );
     for (const row of result.rows) {
       handler({
@@ -84,11 +88,15 @@ export async function subscribeToOrderEvents(
 }
 
 export async function replayOrderEvents(
-  handler: (event: { type: string; data: Record<string, unknown>; streamId: string }) => Promise<void>
+  handler: (event: {
+    type: string;
+    data: Record<string, unknown>;
+    streamId: string;
+  }) => Promise<void>,
 ): Promise<void> {
   await initOrderEventsTable();
   const result = await getPool().query(
-    `SELECT stream_id, event_type, data FROM order_events ORDER BY id ASC`
+    `SELECT stream_id, event_type, data FROM order_events ORDER BY id ASC`,
   );
   for (const row of result.rows) {
     await handler({

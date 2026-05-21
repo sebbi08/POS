@@ -1,8 +1,11 @@
-import { replayOrderEvents, subscribeToOrderEvents } from "../modules/orders/order-eventstore";
+import {
+  replayOrderEvents,
+  subscribeToOrderEvents,
+} from "../modules/orders/order-eventstore.js";
 
 type EventHandler = (
   event: { type: string; data: Record<string, unknown> },
-  streamName: string
+  streamName: string,
 ) => void | Promise<void>;
 
 interface Subscription {
@@ -16,7 +19,7 @@ const subscriptions: Subscription[] = [];
 export function registerProjection(
   name: string,
   streamPrefix: string,
-  handler: EventHandler
+  handler: EventHandler,
 ): void {
   subscriptions.push({ name, prefix: streamPrefix, handler });
 }
@@ -27,7 +30,9 @@ export async function startProjections(): Promise<void> {
     return;
   }
 
-  console.log(`[backend:projections] Replaying order events for ${subscriptions.length} projection(s): ${subscriptions.map((s) => s.name).join(", ")}…`);
+  console.log(
+    `[backend:projections] Replaying order events for ${subscriptions.length} projection(s): ${subscriptions.map((s) => s.name).join(", ")}…`,
+  );
   let eventCount = 0;
   const t0 = Date.now();
   await replayOrderEvents(async (event) => {
@@ -41,7 +46,7 @@ export async function startProjections(): Promise<void> {
   });
 
   console.log(
-    `[backend:projections]  Replayed ${eventCount} events in ${Date.now() - t0}ms`
+    `[backend:projections]  Replayed ${eventCount} events in ${Date.now() - t0}ms`,
   );
 
   subscribeToOrderEvents((event) => {

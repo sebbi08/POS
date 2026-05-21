@@ -1,5 +1,5 @@
-import { registerProjection } from "../../projections/runner";
-import { Order, OrderItem, OrderStatus } from "./orders.types";
+import { registerProjection } from "../../projections/runner.js";
+import { Order, OrderItem, OrderStatus } from "./orders.types.js";
 
 export const orders: Map<string, Order> = new Map();
 
@@ -26,7 +26,7 @@ export function initOrderProjections(): void {
         const order = orders.get(data.orderId as string);
         if (order) {
           const existing = order.items.find(
-            (i) => i.itemId === (data.itemId as string)
+            (i) => i.itemId === (data.itemId as string),
           );
           if (existing) {
             existing.qty += data.qty as number;
@@ -51,7 +51,7 @@ export function initOrderProjections(): void {
         const order = orders.get(data.orderId as string);
         if (order) {
           order.items = order.items.filter(
-            (i) => i.itemId !== (data.itemId as string)
+            (i) => i.itemId !== (data.itemId as string),
           );
         }
         break;

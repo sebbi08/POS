@@ -1,11 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../db", () => ({
   getPool: vi.fn().mockReturnValue({
     query: vi.fn().mockResolvedValue({ rows: [] }),
-    connect: vi.fn().mockResolvedValue({ query: vi.fn(), release: vi.fn(), on: vi.fn() }),
+    connect: vi
+      .fn()
+      .mockResolvedValue({ query: vi.fn(), release: vi.fn(), on: vi.fn() }),
   }),
   initTables: vi.fn().mockResolvedValue(undefined),
 }));
@@ -33,11 +35,11 @@ vi.mock("../config", () => ({
 const app = express();
 app.use(express.json());
 
-import authRoutes from "../api/routes/auth.routes";
-import terminalsRoutes from "../api/routes/terminals.routes";
-import companyRoutes from "../api/routes/company.routes";
-import orderRoutes from "../api/routes/orders.routes";
-import { orders as orderProjections } from "../modules/orders/orders.projections";
+import authRoutes from "../api/routes/auth.routes.js";
+import companyRoutes from "../api/routes/company.routes.js";
+import orderRoutes from "../api/routes/orders.routes.js";
+import terminalsRoutes from "../api/routes/terminals.routes.js";
+import { orders as orderProjections } from "../modules/orders/orders.projections.js";
 
 app.use("/api/auth", authRoutes);
 app.use("/api/terminals", terminalsRoutes);
@@ -46,13 +48,17 @@ app.use("/api/orders", orderRoutes);
 
 describe("Auth Routes", () => {
   it("POST /api/auth/login with correct PIN returns admin role", async () => {
-    const res = await request(app).post("/api/auth/login").send({ pin: "0000" });
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ pin: "0000" });
     expect(res.status).toBe(200);
     expect(res.body.role).toBe("admin");
   });
 
   it("POST /api/auth/login with wrong PIN returns 401", async () => {
-    const res = await request(app).post("/api/auth/login").send({ pin: "wrong" });
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ pin: "wrong" });
     expect(res.status).toBe(401);
     expect(res.body.error).toContain("Invalid PIN");
   });
@@ -71,7 +77,9 @@ describe("Terminals Routes", () => {
   });
 
   it("POST /api/terminals without admin PIN returns 403", async () => {
-    const res = await request(app).post("/api/terminals").send({ name: "Test" });
+    const res = await request(app)
+      .post("/api/terminals")
+      .send({ name: "Test" });
     expect(res.status).toBe(403);
   });
 

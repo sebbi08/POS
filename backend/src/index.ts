@@ -1,22 +1,25 @@
-import express from "express";
 import cors from "cors";
-import { config } from "./config";
-import { initTables } from "./db";
-import { startProjections } from "./projections/runner";
-import { initAuthProjections } from "./modules/auth/auth.projections";
-import { initOrderProjections } from "./modules/orders/orders.projections";
-import { initReportingProjections } from "./modules/reporting/reporting.projections";
+import express from "express";
+import { config } from "./config.js";
+import { initTables } from "./db.js";
+import { initAuthProjections } from "./modules/auth/auth.projections.js";
+import { initOrderProjections } from "./modules/orders/orders.projections.js";
+import { initReportingProjections } from "./modules/reporting/reporting.projections.js";
+import { startProjections } from "./projections/runner.js";
 
-import authRoutes from "./api/routes/auth.routes";
-import catalogRoutes from "./api/routes/catalog.routes";
-import ordersRoutes from "./api/routes/orders.routes";
-import terminalsRoutes from "./api/routes/terminals.routes";
-import reportingRoutes from "./api/routes/reporting.routes";
-import companyRoutes from "./api/routes/company.routes";
+import authRoutes from "./api/routes/auth.routes.js";
+import catalogRoutes from "./api/routes/catalog.routes.js";
+import companyRoutes from "./api/routes/company.routes.js";
+import ordersRoutes from "./api/routes/orders.routes.js";
+import reportingRoutes from "./api/routes/reporting.routes.js";
+import terminalsRoutes from "./api/routes/terminals.routes.js";
 
-const startupLog = (msg: string) => console.log(`[backend:startup] ${msg}  (${new Date().toISOString()})`);
+const startupLog = (msg: string) =>
+  console.log(`[backend:startup] ${msg}  (${new Date().toISOString()})`);
 
-startupLog(`Database URL: ${config.pg.connectionString.replace(/\/\/.*@/, "//***@")}`);
+startupLog(
+  `Database URL: ${config.pg.connectionString.replace(/\/\/.*@/, "//***@")}`,
+);
 
 const app = express();
 app.use(cors());
@@ -52,7 +55,9 @@ initTables().then(() => {
 
     app.listen(config.port, () => {
       const total = Date.now() - t0;
-      startupLog(`Listening on http://localhost:${config.port}  (total startup ${total}ms)`);
+      startupLog(
+        `Listening on http://localhost:${config.port}  (total startup ${total}ms)`,
+      );
     });
   });
 });

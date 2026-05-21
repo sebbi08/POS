@@ -1,9 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../db", () => ({
   getPool: vi.fn().mockReturnValue({
     query: vi.fn().mockResolvedValue({ rows: [] }),
-    connect: vi.fn().mockResolvedValue({ query: vi.fn(), release: vi.fn(), on: vi.fn() }),
+    connect: vi
+      .fn()
+      .mockResolvedValue({ query: vi.fn(), release: vi.fn(), on: vi.fn() }),
   }),
   initTables: vi.fn().mockResolvedValue(undefined),
 }));
@@ -17,7 +19,13 @@ vi.mock("../config", () => ({
   },
 }));
 
-import { listGroups, createGroup, listItems, createItem, deleteItem } from "../modules/catalog/catalog.repository";
+import {
+  createGroup,
+  createItem,
+  deleteItem,
+  listGroups,
+  listItems,
+} from "../modules/catalog/catalog.repository.js";
 
 describe("Catalog Repository", () => {
   it("listGroups returns empty array when no rows", async () => {
@@ -37,7 +45,7 @@ describe("Catalog Repository", () => {
   });
 
   it("createItem returns an id", async () => {
-    const id = await createItem("Espresso", "g1", 2.50);
+    const id = await createItem("Espresso", "g1", 2.5);
     expect(id).toBeTruthy();
   });
 

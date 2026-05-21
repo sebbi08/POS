@@ -1,4 +1,4 @@
-import { ImportRow } from "./catalog.types";
+import { ImportRow } from "./catalog.types.js";
 
 export function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
@@ -34,7 +34,12 @@ export function parseCsvLine(line: string): string[] {
 
 export function escapeCsvField(value: string | number): string {
   const str = String(value);
-  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+  if (
+    str.includes(",") ||
+    str.includes('"') ||
+    str.includes("\n") ||
+    str.includes("\r")
+  ) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
@@ -55,9 +60,12 @@ export function parseCsv(text: string): { rows: ImportRow[]; error?: string } {
   const lines = trimmed.split("\n");
   const header = parseCsvLine(lines[0]);
 
-  const missing = EXPECTED_HEADER.filter(h => !header.includes(h));
+  const missing = EXPECTED_HEADER.filter((h) => !header.includes(h));
   if (missing.length > 0 || header.length !== EXPECTED_HEADER.length) {
-    return { rows: [], error: `Invalid CSV: expected columns ${EXPECTED_HEADER.join(",")}` };
+    return {
+      rows: [],
+      error: `Invalid CSV: expected columns ${EXPECTED_HEADER.join(",")}`,
+    };
   }
 
   const idIdx = header.indexOf("id");
@@ -72,7 +80,10 @@ export function parseCsv(text: string): { rows: ImportRow[]; error?: string } {
     if (line.trim() === "") continue;
     const parts = parseCsvLine(line);
     if (parts.length < EXPECTED_HEADER.length) {
-      return { rows: [], error: `Row ${i + 1}: missing fields (expected ${EXPECTED_HEADER.length}, got ${parts.length})` };
+      return {
+        rows: [],
+        error: `Row ${i + 1}: missing fields (expected ${EXPECTED_HEADER.length}, got ${parts.length})`,
+      };
     }
     const row: ImportRow = {
       id: parts[idIdx].trim(),
@@ -83,8 +94,10 @@ export function parseCsv(text: string): { rows: ImportRow[]; error?: string } {
     };
     if (!row.id) return { rows: [], error: `Row ${i + 1}: missing id` };
     if (!row.name) return { rows: [], error: `Row ${i + 1}: missing name` };
-    if (!row.groupName) return { rows: [], error: `Row ${i + 1}: missing group_name` };
-    if (!row.groupVatRate) return { rows: [], error: `Row ${i + 1}: missing group_vat_rate` };
+    if (!row.groupName)
+      return { rows: [], error: `Row ${i + 1}: missing group_name` };
+    if (!row.groupVatRate)
+      return { rows: [], error: `Row ${i + 1}: missing group_vat_rate` };
     if (!row.price) return { rows: [], error: `Row ${i + 1}: missing price` };
     rows.push(row);
   }
@@ -94,12 +107,17 @@ export function parseCsv(text: string): { rows: ImportRow[]; error?: string } {
   }
 
   // Check duplicate IDs in file
-  const allIds = rows.map(r => r.id);
+  const allIds = rows.map((r) => r.id);
   for (const id of new Set(allIds)) {
-    const count = allIds.filter(x => x === id).length;
+    const count = allIds.filter((x) => x === id).length;
     if (count > 1) {
-      const indices = rows.map((r, i) => r.id === id ? i + 2 : -1).filter(i => i > 0);
-      return { rows: [], error: `Duplicate ID ${id} at rows ${indices.join(" and ")}` };
+      const indices = rows
+        .map((r, i) => (r.id === id ? i + 2 : -1))
+        .filter((i) => i > 0);
+      return {
+        rows: [],
+        error: `Duplicate ID ${id} at rows ${indices.join(" and ")}`,
+      };
     }
   }
 

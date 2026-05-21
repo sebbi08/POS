@@ -1,5 +1,5 @@
 import { Pool, types } from "pg";
-import { config } from "./config";
+import { config } from "./config.js";
 
 let pool: Pool;
 
@@ -17,7 +17,8 @@ let tablesInitialized = false;
 
 export async function initTables(): Promise<void> {
   if (tablesInitialized) return;
-  const dbLog = (msg: string) => console.log(`[backend:db] ${msg}  (${new Date().toISOString()})`);
+  const dbLog = (msg: string) =>
+    console.log(`[backend:db] ${msg}  (${new Date().toISOString()})`);
   const t0 = Date.now();
   const client = await getPool().connect();
   dbLog(`Connected to PostgreSQL in ${Date.now() - t0}ms`);
@@ -60,7 +61,9 @@ export async function initTables(): Promise<void> {
       );
     `);
     tablesInitialized = true;
-    console.log(`[backend:db]  Tables created/verified in ${Date.now() - t0}ms`);
+    console.log(
+      `[backend:db]  Tables created/verified in ${Date.now() - t0}ms`,
+    );
   } finally {
     client.release();
   }

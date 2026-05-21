@@ -1,6 +1,6 @@
-import { registerProjection } from "../../projections/runner";
-import { DailyReport, TransactionRecord } from "./reporting.types";
-import { orders as ordersMap } from "../orders/orders.projections";
+import { registerProjection } from "../../projections/runner.js";
+import { orders as ordersMap } from "../orders/orders.projections.js";
+import { DailyReport, TransactionRecord } from "./reporting.types.js";
 
 export const transactionHistory: TransactionRecord[] = [];
 export const dailyReport: DailyReport = {
@@ -15,7 +15,8 @@ export const dailyReport: DailyReport = {
   topItems: [],
 };
 
-export const itemCounts: Map<string, { name: string; count: number }> = new Map();
+export const itemCounts: Map<string, { name: string; count: number }> =
+  new Map();
 
 export function initReportingProjections(): void {
   registerProjection("reporting", "order", (event) => {
@@ -25,11 +26,15 @@ export function initReportingProjections(): void {
         const orderId = data.orderId as string;
         const order = ordersMap.get(orderId);
         if (order && !order.cancelsOrderId) {
-          const totalVatValue = Object.values(data.totalVat as Record<number, number>).reduce((a: number, b: number) => a + b, 0);
+          const totalVatValue = Object.values(
+            data.totalVat as Record<number, number>,
+          ).reduce((a: number, b: number) => a + b, 0);
           const cancelled = data.cancelled as boolean | undefined;
           const status = cancelled ? "cancelled" : "closed";
 
-          const existingIdx = transactionHistory.findIndex((t) => t.orderId === orderId);
+          const existingIdx = transactionHistory.findIndex(
+            (t) => t.orderId === orderId,
+          );
           if (existingIdx >= 0) {
             transactionHistory[existingIdx] = {
               ...transactionHistory[existingIdx],
@@ -64,7 +69,11 @@ export function initReportingProjections(): void {
             for (const item of order.items) {
               const rateKey = String(item.vatRate);
               if (!dailyReport.vatByGroup[rateKey]) {
-                dailyReport.vatByGroup[rateKey] = { rate: item.vatRate, gross: 0, vat: 0 };
+                dailyReport.vatByGroup[rateKey] = {
+                  rate: item.vatRate,
+                  gross: 0,
+                  vat: 0,
+                };
               }
               dailyReport.vatByGroup[rateKey].gross += item.total;
               dailyReport.vatByGroup[rateKey].vat += item.vatAmount;
@@ -97,7 +106,10 @@ export function initReportingProjections(): void {
             items: itemsText,
             itemCount: order.items.length,
             totalGross: order.totalGross,
-            totalVat: Object.values(order.totalVat).reduce((a: number, b: number) => a + b, 0),
+            totalVat: Object.values(order.totalVat).reduce(
+              (a: number, b: number) => a + b,
+              0,
+            ),
             status: "cancelled",
             title: data.title as string,
             cancelsOrderId,
@@ -106,7 +118,9 @@ export function initReportingProjections(): void {
 
           dailyReport.cancelledCount++;
 
-          const origTx = transactionHistory.find((t) => t.orderId === cancelsOrderId);
+          const origTx = transactionHistory.find(
+            (t) => t.orderId === cancelsOrderId,
+          );
           if (origTx && origTx.status !== "cancelled") {
             origTx.status = "cancelled";
           }
@@ -115,7 +129,10 @@ export function initReportingProjections(): void {
           if (original) {
             dailyReport.orderCount = Math.max(0, dailyReport.orderCount - 1);
             dailyReport.totalGross -= original.totalGross;
-            dailyReport.totalVat -= Object.values(original.totalVat).reduce((a: number, b: number) => a + b, 0);
+            dailyReport.totalVat -= Object.values(original.totalVat).reduce(
+              (a: number, b: number) => a + b,
+              0,
+            );
             dailyReport.totalNet -= original.totalNet;
 
             for (const item of original.items) {
@@ -128,7 +145,10 @@ export function initReportingProjections(): void {
 
             const tid = original.terminalId;
             if (dailyReport.byTerminal[tid]) {
-              dailyReport.byTerminal[tid].orderCount = Math.max(0, dailyReport.byTerminal[tid].orderCount - 1);
+              dailyReport.byTerminal[tid].orderCount = Math.max(
+                0,
+                dailyReport.byTerminal[tid].orderCount - 1,
+              );
               dailyReport.byTerminal[tid].total -= original.totalGross;
             }
 

@@ -1,7 +1,10 @@
-import { Router, Request, Response } from "express";
-import { checkAdmin } from "../middleware/auth.middleware";
-import { getDailyReport, transactionHistory } from "../../modules/reporting/reporting.projections";
-import { orders } from "../../modules/orders/orders.projections";
+import { Request, Response, Router } from "express";
+import { orders } from "../../modules/orders/orders.projections.js";
+import {
+  getDailyReport,
+  transactionHistory,
+} from "../../modules/reporting/reporting.projections.js";
+import { checkAdmin } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
@@ -50,7 +53,7 @@ router.get("/transactions", (req: Request, res: Response): void => {
     result = result.filter(
       (t) =>
         t.orderId.toLowerCase().includes(s) ||
-        t.items.toLowerCase().includes(s)
+        t.items.toLowerCase().includes(s),
     );
   }
 

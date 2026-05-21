@@ -1,9 +1,9 @@
-import PdfPrinter from "pdfmake";
 import fs from "fs";
 import path from "path";
-import { config } from "../../config";
-import { getCompanySettings } from "../company/company.repository";
-import { orders } from "../orders/orders.projections";
+import PdfPrinter from "pdfmake";
+import { config } from "../../config.js";
+import { getCompanySettings } from "../company/company.repository.js";
+import { orders } from "../orders/orders.projections.js";
 
 const fonts = {
   Courier: {
@@ -15,17 +15,26 @@ const fonts = {
 const printer = new PdfPrinter(fonts);
 
 function pickupPageContent(
-  companySettings: { name: string; address: string; city: string; vatId: string },
+  companySettings: {
+    name: string;
+    address: string;
+    city: string;
+    vatId: string;
+  },
   item: { name: string; qty: number },
   pickupNum: number,
   orderId: string,
-  now: string
+  now: string,
 ) {
   return [
     { text: companySettings.name, style: "header", alignment: "center" },
     { text: companySettings.address, alignment: "center", fontSize: 8 },
     { text: companySettings.city, alignment: "center", fontSize: 8 },
-    { text: `USt-ID: ${companySettings.vatId}`, alignment: "center", fontSize: 8 },
+    {
+      text: `USt-ID: ${companySettings.vatId}`,
+      alignment: "center",
+      fontSize: 8,
+    },
     { text: "─".repeat(20), alignment: "center", margin: [0, 4] },
     { text: `Pickup #${pickupNum}`, style: "subheader", alignment: "center" },
     { text: "", margin: [0, 4] },
@@ -37,37 +46,52 @@ function pickupPageContent(
 }
 
 function finalPageContent(
-  companySettings: { name: string; address: string; city: string; vatId: string },
-  order: { id: string; terminalId: string; items: { name: string; qty: number; total: number }[]; totalGross: number; totalVat: Record<number, number> },
-  now: string
+  companySettings: {
+    name: string;
+    address: string;
+    city: string;
+    vatId: string;
+  },
+  order: {
+    id: string;
+    terminalId: string;
+    items: { name: string; qty: number; total: number }[];
+    totalGross: number;
+    totalVat: Record<number, number>;
+  },
+  now: string,
 ) {
-  const itemLines = order.items.map(
-    (i) => ({
-      columns: [
-        { text: `${i.qty}× ${i.name}`, width: "auto" },
-        { text: `${i.total.toFixed(2)}€`, alignment: "right", width: "*" },
-      ],
-      fontSize: 8,
-      margin: [0, 1],
-    })
-  );
+  const itemLines = order.items.map((i) => ({
+    columns: [
+      { text: `${i.qty}× ${i.name}`, width: "auto" },
+      { text: `${i.total.toFixed(2)}€`, alignment: "right", width: "*" },
+    ],
+    fontSize: 8,
+    margin: [0, 1],
+  }));
 
-  const vatLines = Object.entries(order.totalVat).map(
-    ([rate, amount]) => ({
-      columns: [
-        { text: `VAT ${rate}%:`, width: "auto" },
-        { text: `${(amount as number).toFixed(2)}€`, alignment: "right", width: "*" },
-      ],
-      fontSize: 8,
-      margin: [0, 1],
-    })
-  );
+  const vatLines = Object.entries(order.totalVat).map(([rate, amount]) => ({
+    columns: [
+      { text: `VAT ${rate}%:`, width: "auto" },
+      {
+        text: `${(amount as number).toFixed(2)}€`,
+        alignment: "right",
+        width: "*",
+      },
+    ],
+    fontSize: 8,
+    margin: [0, 1],
+  }));
 
   return [
     { text: companySettings.name, style: "header", alignment: "center" },
     { text: companySettings.address, alignment: "center", fontSize: 8 },
     { text: companySettings.city, alignment: "center", fontSize: 8 },
-    { text: `USt-ID: ${companySettings.vatId}`, alignment: "center", fontSize: 8 },
+    {
+      text: `USt-ID: ${companySettings.vatId}`,
+      alignment: "center",
+      fontSize: 8,
+    },
     { text: "─".repeat(20), alignment: "center", margin: [0, 4] },
     { text: "Final Receipt", style: "subheader", alignment: "center" },
     { text: "", margin: [0, 2] },
@@ -78,19 +102,28 @@ function finalPageContent(
     {
       columns: [
         { text: "Total:", bold: true, width: "auto" },
-        { text: `${order.totalGross.toFixed(2)} €`, bold: true, alignment: "right", width: "*" },
+        {
+          text: `${order.totalGross.toFixed(2)} €`,
+          bold: true,
+          alignment: "right",
+          width: "*",
+        },
       ],
       fontSize: 10,
       margin: [0, 2],
     },
     { text: "", margin: [0, 4] },
-    { text: `Order #${order.id.slice(0, 8)} · ${order.terminalId}`, alignment: "center", fontSize: 8 },
+    {
+      text: `Order #${order.id.slice(0, 8)} · ${order.terminalId}`,
+      alignment: "center",
+      fontSize: 8,
+    },
     { text: now, alignment: "center", fontSize: 8 },
   ];
 }
 
 export async function generateCombinedReceiptPdf(
-  orderId: string
+  orderId: string,
 ): Promise<string> {
   const order = orders.get(orderId);
   if (!order) throw new Error(`Order ${orderId} not found`);
@@ -103,7 +136,13 @@ export async function generateCombinedReceiptPdf(
   const content: any[] = [{ stack: finalStack }];
 
   order.items.forEach((item, i) => {
-    const pickupStack = pickupPageContent(companySettings, item, i + 1, orderId, now);
+    const pickupStack = pickupPageContent(
+      companySettings,
+      item,
+      i + 1,
+      orderId,
+      now,
+    );
     content.push({ stack: pickupStack, pageBreak: "before" });
   });
 
@@ -134,7 +173,7 @@ export async function generateCombinedReceiptPdf(
 export async function generatePickupReceiptPdf(
   orderId: string,
   itemId: string,
-  pickupSeq: number
+  pickupSeq: number,
 ): Promise<string> {
   const order = orders.get(orderId);
   if (!order) throw new Error(`Order ${orderId} not found`);
@@ -171,7 +210,7 @@ export async function generatePickupReceiptPdf(
 }
 
 export async function generateFinalReceiptPdf(
-  orderId: string
+  orderId: string,
 ): Promise<string> {
   const order = orders.get(orderId);
   if (!order) throw new Error(`Order ${orderId} not found`);
