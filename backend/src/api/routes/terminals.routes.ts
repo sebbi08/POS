@@ -29,7 +29,7 @@ router.post("/", checkAdmin, (req: Request, res: Response): void => {
 router.put("/:id", checkAdmin, (req: Request, res: Response): void => {
   const { name, groupIds, printerVendorId, printerProductId } = req.body;
   updateTerminal(
-    req.params.id,
+    req.params.id as string,
     name,
     groupIds,
     printerVendorId,
@@ -38,16 +38,16 @@ router.put("/:id", checkAdmin, (req: Request, res: Response): void => {
 });
 
 router.delete("/:id", checkAdmin, (req: Request, res: Response): void => {
-  const openOrders = getOpenOrdersByTerminal(req.params.id);
+  const openOrders = getOpenOrdersByTerminal(req.params.id as string);
   if (openOrders.length > 0) {
     res.status(409).json({ error: "Cannot delete terminal with open orders" });
     return;
   }
-  deleteTerminal(req.params.id).then(() => res.json({ status: "deleted" }));
+  deleteTerminal(req.params.id as string).then(() => res.json({ status: "deleted" }));
 });
 
 router.get("/:id/items", (req: Request, res: Response): void => {
-  getTerminalItems(req.params.id).then((items) => res.json(items));
+  getTerminalItems(req.params.id as string).then((items) => res.json(items));
 });
 
 export default router;

@@ -41,13 +41,13 @@ router.post("/groups", (req: Request, res: Response): void => {
 
 router.put("/groups/:id", (req: Request, res: Response): void => {
   const { name, vatRate } = req.body;
-  updateGroup(req.params.id, name, vatRate).then(() =>
+  updateGroup(req.params.id as string as string, name, vatRate).then(() =>
     res.json({ status: "updated" }),
   );
 });
 
 router.delete("/groups/:id", (req: Request, res: Response): void => {
-  deleteGroup(req.params.id).then(() => res.json({ status: "deleted" }));
+  deleteGroup(req.params.id as string).then(() => res.json({ status: "deleted" }));
 });
 
 router.get("/items", (_req: Request, res: Response): void => {
@@ -61,13 +61,13 @@ router.post("/items", (req: Request, res: Response): void => {
 
 router.put("/items/:id", (req: Request, res: Response): void => {
   const { name, groupId, price } = req.body;
-  updateItem(req.params.id, name, groupId, price).then(() =>
+  updateItem(req.params.id as string, name, groupId, price).then(() =>
     res.json({ status: "updated" }),
   );
 });
 
 router.delete("/items/:id", (req: Request, res: Response): void => {
-  deleteItem(req.params.id).then(() => res.json({ status: "deleted" }));
+  deleteItem(req.params.id as string).then(() => res.json({ status: "deleted" }));
 });
 
 router.post("/export", async (req: Request, res: Response): Promise<void> => {

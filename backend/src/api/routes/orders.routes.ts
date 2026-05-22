@@ -56,7 +56,7 @@ router.post(
       const group = await getGroup(item.groupId);
       const vatRate = group ? group.vatRate : 0;
       addItemToOrder(
-        req.params.id,
+        req.params.id as string,
         item.id,
         item.name,
         qty || 1,
@@ -70,7 +70,7 @@ router.post(
 );
 
 router.delete("/:id/items/:itemId", (req: Request, res: Response): void => {
-  removeItemFromOrder(req.params.id, req.params.itemId).then(() =>
+  removeItemFromOrder(req.params.id as string, req.params.itemId as string).then(() =>
     res.json({ status: "item removed" }),
   );
 });
@@ -78,9 +78,9 @@ router.delete("/:id/items/:itemId", (req: Request, res: Response): void => {
 router.post(
   "/:id/print",
   async (req: Request, res: Response): Promise<void> => {
-    await printFinalReceipt(req.params.id);
+    await printFinalReceipt(req.params.id as string);
 
-    const order = orders.get(req.params.id);
+    const order = orders.get(req.params.id as string);
     if (!order) {
       res.status(404).json({ error: "Order not found" });
       return;
@@ -90,7 +90,7 @@ router.post(
       await printPickupReceipt(order.id, item.itemId);
     }
 
-    generateCombinedReceiptPdf(req.params.id);
+    generateCombinedReceiptPdf(req.params.id as string);
 
     const company = await getCompanySettings();
 
@@ -128,17 +128,17 @@ router.post(
 );
 
 router.post("/:id/close", (req: Request, res: Response): void => {
-  closeOrder(req.params.id).then(() => res.json({ status: "closed" }));
+  closeOrder(req.params.id as string).then(() => res.json({ status: "closed" }));
 });
 
 router.post("/:id/cancel", (req: Request, res: Response): void => {
   const { reason } = req.body;
-  const order = orders.get(req.params.id);
+  const order = orders.get(req.params.id as string);
   if (!order) {
     res.status(404).json({ error: "Order not found" });
     return;
   }
-  cancelOrder(req.params.id, order.terminalId, reason)
+  cancelOrder(req.params.id as string, order.terminalId, reason)
     .then((cancellationId) => res.json({ status: "cancelled", cancellationId }))
     .catch((err: Error) => res.status(400).json({ error: err.message }));
 });
