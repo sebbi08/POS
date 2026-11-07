@@ -110,13 +110,3 @@ export function initOrderProjections(): void {
     }
   });
 }
-
-export function getOpenOrdersByTerminal(terminalId: string): Order[] {
-  const result: Order[] = [];
-  for (const order of orders.values()) {
-    if (order.terminalId === terminalId && order.status === "open") {
-      result.push(order);
-    }
-  }
-  return result;
-}

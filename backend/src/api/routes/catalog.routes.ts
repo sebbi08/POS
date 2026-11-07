@@ -30,44 +30,44 @@ const router = Router();
 
 router.use(checkAdmin);
 
-router.get("/groups", (_req: Request, res: Response): void => {
-  listGroups().then((groups) => res.json(groups));
+router.get("/groups", async (_req: Request, res: Response): Promise<void> => {
+  res.json(await listGroups());
 });
 
-router.post("/groups", (req: Request, res: Response): void => {
+router.post("/groups", async (req: Request, res: Response): Promise<void> => {
   const { name, vatRate } = req.body;
-  createGroup(name, vatRate).then((id) => res.json({ id }));
+  res.json({ id: await createGroup(name, vatRate) });
 });
 
-router.put("/groups/:id", (req: Request, res: Response): void => {
+router.put("/groups/:id", async (req: Request, res: Response): Promise<void> => {
   const { name, vatRate } = req.body;
-  updateGroup(req.params.id as string as string, name, vatRate).then(() =>
-    res.json({ status: "updated" }),
-  );
+  await updateGroup(req.params.id as string, name, vatRate);
+  res.json({ status: "updated" });
 });
 
-router.delete("/groups/:id", (req: Request, res: Response): void => {
-  deleteGroup(req.params.id as string).then(() => res.json({ status: "deleted" }));
+router.delete("/groups/:id", async (req: Request, res: Response): Promise<void> => {
+  await deleteGroup(req.params.id as string);
+  res.json({ status: "deleted" });
 });
 
-router.get("/items", (_req: Request, res: Response): void => {
-  listItems().then((items) => res.json(items));
+router.get("/items", async (_req: Request, res: Response): Promise<void> => {
+  res.json(await listItems());
 });
 
-router.post("/items", (req: Request, res: Response): void => {
+router.post("/items", async (req: Request, res: Response): Promise<void> => {
   const { name, groupId, price } = req.body;
-  createItem(name, groupId, price).then((id) => res.json({ id }));
+  res.json({ id: await createItem(name, groupId, price) });
 });
 
-router.put("/items/:id", (req: Request, res: Response): void => {
+router.put("/items/:id", async (req: Request, res: Response): Promise<void> => {
   const { name, groupId, price } = req.body;
-  updateItem(req.params.id as string, name, groupId, price).then(() =>
-    res.json({ status: "updated" }),
-  );
+  await updateItem(req.params.id as string, name, groupId, price);
+  res.json({ status: "updated" });
 });
 
-router.delete("/items/:id", (req: Request, res: Response): void => {
-  deleteItem(req.params.id as string).then(() => res.json({ status: "deleted" }));
+router.delete("/items/:id", async (req: Request, res: Response): Promise<void> => {
+  await deleteItem(req.params.id as string);
+  res.json({ status: "deleted" });
 });
 
 router.post("/export", async (req: Request, res: Response): Promise<void> => {

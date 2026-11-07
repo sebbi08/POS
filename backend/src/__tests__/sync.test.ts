@@ -240,6 +240,20 @@ describe("POST /api/sync/bookings", () => {
     expect(res.body.accepted).toEqual(["c1"]);
   });
 
+  it("accepts cancellation of a sale stored by an earlier upload the projection has not applied yet", async () => {
+    poolQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
+      if (String(sql).includes("FROM synced_orders")) {
+        return params?.[0] === "o1" && params?.[1] === "t1" ? { rows: [{ "?column?": 1 }] } : { rows: [] };
+      }
+      return poolResponder(sql);
+    });
+    const res = await upload({ orders: [cancellation("c1", "o1"), cancellation("c2", "o9")] });
+    expect(res.body.accepted).toEqual(["c1"]);
+    expect(res.body.rejected.map((r: { orderId: string }) => r.orderId)).toEqual(["c2"]);
+    const lookup = poolQuery.mock.calls.find(([sql]) => String(sql).includes("FROM synced_orders"));
+    expect(String(lookup?.[0])).toMatch(/order_id = \$1 AND terminal_id = \$2 AND cancels_order_id IS NULL/);
+  });
+
   it("rejects cancellation of an unknown, foreign or already cancelled sale", async () => {
     orders.set("o2", { id: "o2", terminalId: "t2" } as Order);
     orders.set("o3", {

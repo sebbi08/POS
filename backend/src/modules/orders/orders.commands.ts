@@ -50,6 +50,8 @@ export async function cancelOrder(
   const original = orders.get(originalOrderId);
   if (!original) throw new Error(`Bestellung ${originalOrderId} nicht gefunden`);
   if (original.cancelledByOrderId) throw new Error(`Bestellung bereits storniert`);
+  if (original.cancelsOrderId) throw new Error("Eine Stornobuchung kann nicht storniert werden");
+  if (original.discarded) throw new Error("Verworfene Bestellung kann nicht storniert werden");
 
   // Open orders: just close them (discard, no financial record needed)
   if (original.status === "open") {

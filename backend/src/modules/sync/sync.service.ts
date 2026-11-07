@@ -114,7 +114,10 @@ export async function ingestUploads(
   const acceptedSales = new Set<string>();
   const cancelledInBatch = new Map<string, string>();
 
-  const isKnownSale = (saleId: string, cancellationId: string): boolean => {
+  const isKnownSale = async (
+    saleId: string,
+    cancellationId: string,
+  ): Promise<boolean> => {
     const cancelledBy = cancelledInBatch.get(saleId);
     if (cancelledBy !== undefined && cancelledBy !== cancellationId) {
       return false;
@@ -129,12 +132,20 @@ export async function ingestUploads(
           order.cancelledByOrderId === cancellationId)
       );
     }
-    return acceptedSales.has(saleId);
+    if (acceptedSales.has(saleId)) return true;
+    // Stored by an earlier upload that the projection has not applied yet. A
+    // second cancellation is still refused by the unique cancels_order_id index.
+    const stored = await getPool().query(
+      `SELECT 1 FROM synced_orders
+       WHERE order_id = $1 AND terminal_id = $2 AND cancels_order_id IS NULL`,
+      [saleId, terminalId],
+    );
+    return stored.rows.length > 0;
   };
 
   for (const u of uploads) {
     const orderId = typeof u?.orderId === "string" ? u.orderId : "";
-    const error = validateUpload(u, terminalId, (id) =>
+    const error = await validateUpload(u, terminalId, (id) =>
       isKnownSale(id, orderId),
     );
     if (error) {

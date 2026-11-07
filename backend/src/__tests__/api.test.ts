@@ -110,6 +110,14 @@ describe("Terminal key routes", () => {
     expect(res.body.key).toMatch(/^[A-Za-z0-9_-]{32}$/);
   });
 
+  it("POST /api/terminals/:id/key answers 500 when the database fails", async () => {
+    vi.mocked(getPool().query).mockRejectedValueOnce(new Error("db down"));
+    const res = await request(app)
+      .post("/api/terminals/t1/key")
+      .set("x-admin-pin", "0000");
+    expect(res.status).toBe(500);
+  });
+
   it("POST /api/terminals/:id/key returns 404 for unknown terminal", async () => {
     const res = await request(app)
       .post("/api/terminals/nope/key")
@@ -139,6 +147,19 @@ describe("Order Routes", () => {
     expect(res.status).toBe(403);
   });
 
+  it("POST /api/orders/:id/cancel without a body cancels with the default title", async () => {
+    orderProjections.clear();
+    orderProjections.set("closed-order", {
+      id: "closed-order", terminalId: "t1", status: "closed", items: [],
+      totalGross: 4.5, totalVat: {}, totalNet: 4.5, discarded: false,
+    } as any);
+    const res = await request(app)
+      .post("/api/orders/closed-order/cancel")
+      .set("x-admin-pin", "0000");
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("cancelled");
+  });
+
   it("POST /api/orders/open returns 404", async () => {
     const res = await request(app)
       .post("/api/orders/open")
@@ -147,8 +168,8 @@ describe("Order Routes", () => {
   });
 });
 
-describe("Terminal Delete Constraint", () => {
-  it("DELETE /api/terminals/:id rejects when terminal has open orders", async () => {
+describe("Terminal delete", () => {
+  it("DELETE /api/terminals/:id succeeds even with a stale open order of the old browser till", async () => {
     orderProjections.clear();
     orderProjections.set("open-order", {
       id: "open-order",
@@ -164,17 +185,6 @@ describe("Terminal Delete Constraint", () => {
 
     const res = await request(app)
       .delete("/api/terminals/term-to-delete")
-      .set("x-admin-pin", "0000");
-
-    expect(res.status).toBe(409);
-    expect(res.body.error).toContain("Terminal mit offenen Bestellungen kann nicht gelöscht werden");
-  });
-
-  it("DELETE /api/terminals/:id succeeds when terminal has no open orders", async () => {
-    orderProjections.clear();
-
-    const res = await request(app)
-      .delete("/api/terminals/some-terminal")
       .set("x-admin-pin", "0000");
 
     expect(res.status).toBe(200);

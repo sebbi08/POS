@@ -43,11 +43,11 @@ function hasTotals(d: Record<string, unknown>): boolean {
 }
 
 /** Returns a German error text, or null when the booking may be stored. */
-export function validateUpload(
+export async function validateUpload(
   u: BookingUpload,
   terminalId: string,
-  isKnownSale: (id: string) => boolean,
-): string | null {
+  isKnownSale: (id: string) => Promise<boolean>,
+): Promise<string | null> {
   if (!isObject(u) || typeof u.orderId !== "string" || !u.orderId) {
     return "Buchungs-ID fehlt";
   }
@@ -81,7 +81,7 @@ export function validateUpload(
     ) {
       return "Gegenbuchung enthält ungültige Daten";
     }
-    if (typeof data.cancelsOrderId !== "string" || !isKnownSale(data.cancelsOrderId)) {
+    if (typeof data.cancelsOrderId !== "string" || !(await isKnownSale(data.cancelsOrderId))) {
       return "Originalbuchung unbekannt oder bereits storniert";
     }
     return null;

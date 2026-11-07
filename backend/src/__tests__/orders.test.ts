@@ -29,7 +29,6 @@ vi.mock("../projections/runner", () => ({
 
 import { type StoredEvent } from "../modules/orders/order-eventstore.js";
 import {
-  getOpenOrdersByTerminal,
   initOrderProjections,
   orders,
 } from "../modules/orders/orders.projections.js";
@@ -179,35 +178,6 @@ describe("Orders Projections", () => {
       "2026-06-01T20:15:00.000Z",
     );
   });
-
-  it("getOpenOrdersByTerminal filters by terminal and status", () => {
-    orders.clear();
-    initOrderProjections();
-    const handler = vi.mocked(registerProjection).mock.calls[0][2] as (
-      e: Partial<StoredEvent>,
-      streamName: string,
-    ) => void | Promise<void>;
-
-    handler(
-      { type: "OrderOpened", data: { id: "o1", terminalId: "bar" } },
-      "order-o1",
-    );
-    handler(
-      { type: "OrderOpened", data: { id: "o2", terminalId: "kitchen" } },
-      "order-o2",
-    );
-    handler(
-      {
-        type: "OrderClosed",
-        data: { orderId: "o2", totalGross: 0, totalVat: {}, totalNet: 0 },
-      },
-      "order-o2",
-    );
-
-    const barOrders = getOpenOrdersByTerminal("bar");
-    expect(barOrders).toHaveLength(1);
-    expect(barOrders[0].id).toBe("o1");
-  });
 });
 
 describe("cancelOrder", () => {
@@ -222,5 +192,25 @@ describe("cancelOrder", () => {
     await cancelOrder("12345678-aaaa", "t1");
     const data = vi.mocked(appendOrderEvent).mock.calls.at(-1)![2] as { title: string };
     expect(data.title).toBe("Storno zu Bestellung #12345678");
+  });
+
+  it("refuses to cancel a cancellation", async () => {
+    const { cancelOrder } = await import("../modules/orders/orders.commands.js");
+    orders.clear();
+    orders.set("c1", {
+      id: "c1", terminalId: "t1", status: "closed", items: [], cancelsOrderId: "o1",
+      totalGross: -4.5, totalVat: {}, totalNet: -4.5, discarded: false,
+    } as never);
+    await expect(cancelOrder("c1", "t1")).rejects.toThrow("Eine Stornobuchung kann nicht storniert werden");
+  });
+
+  it("refuses to cancel a discarded order", async () => {
+    const { cancelOrder } = await import("../modules/orders/orders.commands.js");
+    orders.clear();
+    orders.set("d1", {
+      id: "d1", terminalId: "t1", status: "closed", items: [],
+      totalGross: 0, totalVat: {}, totalNet: 0, discarded: true,
+    } as never);
+    await expect(cancelOrder("d1", "t1")).rejects.toThrow("Verworfene Bestellung kann nicht storniert werden");
   });
 });

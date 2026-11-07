@@ -7,15 +7,14 @@ import { checkAdmin } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
-router.get("/", (_req: Request, res: Response): void => {
-  getCompanySettings().then((settings) => res.json(settings));
+router.get("/", async (_req: Request, res: Response): Promise<void> => {
+  res.json(await getCompanySettings());
 });
 
-router.put("/", checkAdmin, (req: Request, res: Response): void => {
+router.put("/", checkAdmin, async (req: Request, res: Response): Promise<void> => {
   const { name, address, city, vatId } = req.body;
-  updateCompanySettings(name, address, city, vatId).then(() =>
-    res.json({ status: "updated" }),
-  );
+  await updateCompanySettings(name, address, city, vatId);
+  res.json({ status: "updated" });
 });
 
 export default router;
