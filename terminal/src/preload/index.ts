@@ -17,6 +17,15 @@ const bridge: TerminalBridge = {
     return () => { ipcRenderer.removeListener("usb:choose", listener); };
   },
   chooseUsb: (deviceId) => ipcRenderer.invoke("usb:chosen", deviceId),
+  onUpdateReady: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, version: string) => cb(version);
+    ipcRenderer.on("update:ready", listener);
+    // Main remembers the version: a renderer that subscribes late (or reloaded) still gets it.
+    void ipcRenderer.invoke("app:updateReady").then((version: string | null) => {
+      if (version !== null) cb(version);
+    }, () => {});
+    return () => { ipcRenderer.removeListener("update:ready", listener); };
+  },
 };
 
 contextBridge.exposeInMainWorld("terminal", bridge);

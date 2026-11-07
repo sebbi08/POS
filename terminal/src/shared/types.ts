@@ -25,4 +25,6 @@ export interface TerminalBridge {   // window.terminal
   onUsbChoose(cb: (devices: UsbDeviceChoice[]) => void): () => void;
   /** Answer to onUsbChoose; null cancels the search. */
   chooseUsb(deviceId: string | null): Promise<void>;
+  /** An update is downloaded and installs on quit. Also fires for one that became ready before subscribing. */
+  onUpdateReady(cb: (version: string) => void): () => void;
 }

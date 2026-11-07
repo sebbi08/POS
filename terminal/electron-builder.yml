@@ -1,0 +1,25 @@
+appId: de.pos.kasse
+productName: POS Kasse
+directories:
+  output: dist
+files:
+  - out/**
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Office
+# TODO: set GitHub owner/repo before first release
+publish:
+  provider: github
+  owner: OWNER
+  repo: REPO
+  releaseType: release

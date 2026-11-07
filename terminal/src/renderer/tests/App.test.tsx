@@ -496,4 +496,20 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Buchungen übertragen" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Storno" })).toBeEnabled();
   });
+
+  it("shows the downloaded update in the status bar, only once one is ready", async () => {
+    setup({ settings, catalog });
+    await screen.findByRole("button", { name: "Storno" });
+    expect(screen.queryByText(/bereit – wird beim Beenden installiert/)).not.toBeInTheDocument();
+    act(() => fake.emitUpdateReady("1.2.3"));
+    expect(screen.getByText("Update 1.2.3 bereit – wird beim Beenden installiert")).toBeInTheDocument();
+  });
+
+  it("unsubscribes from update notices on unmount", async () => {
+    const { unmount } = setup({ settings, catalog });
+    await screen.findByRole("button", { name: "Storno" });
+    expect(fake.updateListeners.size).toBe(1);
+    unmount();
+    expect(fake.updateListeners.size).toBe(0);
+  });
 });

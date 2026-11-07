@@ -56,6 +56,7 @@ export function installFakeBridge(init: Init = {}) {
     events: (init.events ?? []).map((e): LocalEvent => ({ ...clone(e), seq: ++seq })),
     synced: { ...(init.synced ?? {}) },
   };
+  const updateListeners = new Set<(version: string) => void>();
   const bridge = {
     appendEvents: vi.fn(async (events: NewEvent[]) => {
       const added = events.map((e): LocalEvent => ({ ...clone(e), seq: ++seq }));
@@ -76,7 +77,12 @@ export function installFakeBridge(init: Init = {}) {
     appVersion: vi.fn(async () => "0.1.0"),
     onUsbChoose: vi.fn(() => () => {}),
     chooseUsb: vi.fn(async () => {}),
+    onUpdateReady: vi.fn((cb: (version: string) => void) => {
+      updateListeners.add(cb);
+      return () => { updateListeners.delete(cb); };
+    }),
   } satisfies TerminalBridge;
   (window as unknown as { terminal: TerminalBridge }).terminal = bridge;
-  return { bridge, state, log };
+  const emitUpdateReady = (version: string) => { for (const cb of updateListeners) cb(version); };
+  return { bridge, state, log, emitUpdateReady, updateListeners };
 }

@@ -37,6 +37,7 @@ export function useTerminal() {
   const [message, setMessage] = useState<Message | null>(null);
   const [pending, setPending] = useState(0);
   const [sync, setSync] = useState<SyncKind | null>(null);
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const syncingRef = useRef(false);
   /** Orders in an upload that is still waiting for the server; they must not be cancelled meanwhile. */
@@ -70,6 +71,8 @@ export function useTerminal() {
       });
     return () => { alive = false; };
   }, [commit]);
+
+  useEffect(() => bridge().onUpdateReady(setUpdateVersion), []);
 
   const enqueue = useCallback((task: () => Promise<void>): Promise<void> => {
     setPending((n) => n + 1);
@@ -312,6 +315,7 @@ export function useTerminal() {
     syncing: sync !== null,
     uploading: sync === "upload",
     message,
+    updateVersion,
     actions: {
       addItem, changeQty, removeLine, discard, checkout, cancel, reprintLast,
       fetchCatalog, upload, saveSettings, dismissMessage,

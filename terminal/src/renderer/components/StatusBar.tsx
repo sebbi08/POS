@@ -7,6 +7,8 @@ interface Props {
   /** Bookings in flight must not be cancelled; a catalog fetch does not block Storno. */
   uploading: boolean;
   canReprint: boolean;
+  /** Version of a downloaded update that installs on quit. */
+  updateVersion: string | null;
   onFetchCatalog: () => void;
   onUpload: () => void;
   onReprint: () => void;
@@ -30,6 +32,9 @@ function StatusBar(p: Props) {
           <div className={p.unsyncedCount > 0 ? "text-yellow-300" : "text-gray-400"}>
             {`${p.unsyncedCount} Buchung(en) nicht übertragen`}
           </div>
+          {p.updateVersion && (
+            <div className="text-green-300">{`Update ${p.updateVersion} bereit – wird beim Beenden installiert`}</div>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2 flex-wrap justify-end">

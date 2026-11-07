@@ -4,11 +4,12 @@ import type { CatalogSnapshot } from "../shared/contract";
 import type { NewEvent, TerminalSettings } from "../shared/types";
 import { resolveDataDir } from "./data-dir";
 import { LocalStore } from "./store";
+import { createUpdateNotice, startUpdater } from "./updater";
 import { registerUsb } from "./usb";
 
 const RETENTION_DAYS = 30;
 
-function registerIpc(store: LocalStore): void {
+function registerIpc(store: LocalStore, updateReady: () => string | null): void {
   ipcMain.handle("store:appendEvents", (_e, events: NewEvent[]) => store.appendEvents(events));
   ipcMain.handle("store:readEvents", () => store.readEvents());
   ipcMain.handle("store:markSynced", (_e, orderIds: string[]) => store.markSynced(orderIds));
@@ -18,6 +19,7 @@ function registerIpc(store: LocalStore): void {
   ipcMain.handle("store:saveSettings", (_e, s: TerminalSettings) => store.saveSettings(s));
   ipcMain.handle("store:loadSettings", () => store.loadSettings());
   ipcMain.handle("app:version", () => app.getVersion());
+  ipcMain.handle("app:updateReady", () => updateReady());
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -53,9 +55,11 @@ async function start(dataDir: string): Promise<void> {
     // Never keep the till from starting because of housekeeping; the error resurfaces on read.
     console.error("compact failed", err);
   }
-  registerIpc(store);
+  const updateNotice = createUpdateNotice((version) => mainWindow?.webContents.send("update:ready", version));
+  registerIpc(store, updateNotice.current);
   registerUsb(session.defaultSession, () => mainWindow);
   createWindow();
+  startUpdater({ isPackaged: app.isPackaged, notify: updateNotice.ready });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

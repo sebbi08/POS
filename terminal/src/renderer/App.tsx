@@ -63,6 +63,7 @@ export default function App() {
         syncing={t.syncing}
         uploading={t.uploading}
         canReprint={t.canReprint}
+        updateVersion={t.updateVersion}
         onFetchCatalog={() => void actions.fetchCatalog()}
         onUpload={() => void actions.upload()}
         onReprint={() => void actions.reprintLast()}
