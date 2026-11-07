@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { CatalogSnapshot } from "../shared/contract";
 import type { NewEvent, TerminalSettings } from "../shared/types";
 import { resolveDataDir } from "./data-dir";
+import { isAllowedNavigation } from "./navigation";
 import { LocalStore } from "./store";
 import { createUpdateNotice, startUpdater } from "./updater";
 import { registerUsb } from "./usb";
@@ -40,8 +41,13 @@ function createWindow(): void {
     if (mainWindow === win) mainWindow = null;
   });
   mainWindow = win;
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL);
+  const devUrl = process.env.ELECTRON_RENDERER_URL;
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isAllowedNavigation(url, devUrl)) event.preventDefault();
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  if (devUrl) {
+    void win.loadURL(devUrl);
   } else {
     void win.loadFile(join(__dirname, "../renderer/index.html"));
   }
