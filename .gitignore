@@ -6,3 +6,5 @@ pg-data
 test-results/
 playwright-report/
 
+terminal/out
+terminal/dist
