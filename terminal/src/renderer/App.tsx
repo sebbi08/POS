@@ -36,6 +36,7 @@ export default function App() {
         {messageBar}
         <SetupWizard
           initial={t.settings}
+          lockedTerminalId={t.hasPendingUploads ? t.settings?.terminalId ?? null : null}
           onSetup={async (candidate) => {
             const ok = await actions.fetchCatalog(candidate);
             if (ok) setResetup(false);
@@ -108,7 +109,6 @@ export default function App() {
       {dialog === "settings" && (
         <SettingsDialog
           settings={settings}
-          unsyncedCount={t.unsyncedCount}
           hasOpenOrder={openOrder !== undefined}
           syncing={t.syncing}
           onSave={(patch) => void actions.saveSettings(patch)}

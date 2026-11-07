@@ -3,7 +3,6 @@ import PrinterSettings from "./PrinterSettings";
 
 interface Props {
   settings: TerminalSettings;
-  unsyncedCount: number;
   hasOpenOrder: boolean;
   syncing: boolean;
   /** Only the changed fields; they are merged into the latest settings when written. */
@@ -12,9 +11,11 @@ interface Props {
   onClose: () => void;
 }
 
-/** Why „Terminal neu einrichten“ is not possible right now, or null. */
-function resetupBlocker({ unsyncedCount, hasOpenOrder, syncing }: Props): string | null {
-  if (unsyncedCount > 0) return "Erst alle Buchungen übertragen";
+/**
+ * Why „Terminal neu einrichten“ is not possible right now, or null. Pending bookings do not block
+ * it (a rotated key must be replaceable); the wizard then keeps the same terminal.
+ */
+function resetupBlocker({ hasOpenOrder, syncing }: Props): string | null {
   if (hasOpenOrder) return "Erst offene Bestellung abschließen oder verwerfen";
   if (syncing) return "Abgleich läuft – bitte warten";
   return null;

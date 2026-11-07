@@ -5,10 +5,12 @@ import {
   cmdAddItem, cmdCancel, cmdChangeQty, cmdCheckout, cmdDiscard, cmdRemoveLine,
   lastPrintable, openOrderOf, projectOrders, type LocalOrder,
 } from "../domain/orders";
-import { cancellableOrders, pendingUploads, unsyncedCount } from "../domain/sync-selection";
+import { cancellableOrders, hasPendingUploads, pendingUploads, unsyncedCount } from "../domain/sync-selection";
 import { printJobs } from "../print/usb";
 import { fetchCatalog as requestCatalog, SyncError, uploadAll } from "../sync/client";
-import { clockWarningText, SAVE_FAILED, SAVE_SUSPECT, syncErrorText, uploadMessage, type Message } from "./messages";
+import {
+  clockWarningText, SAVE_FAILED, SAVE_SUSPECT, syncErrorText, TERMINAL_LOCKED, uploadMessage, type Message,
+} from "./messages";
 import { printFailureText, receiptJobs } from "./receipts";
 
 interface Data {
@@ -214,9 +216,19 @@ export function useTerminal() {
     if (printError) setMessage({ kind: "error", text: printError });
   });
 
-  /** Fetches the catalog; with `setup` it uses those credentials and stores them on success. */
+  /**
+   * Fetches the catalog; with `setup` it uses those credentials and stores them on success.
+   * While bookings wait for the upload, a setup may only change server and key, never the terminal:
+   * the bookings carry the terminal id and would be rejected by the new one.
+   */
   const fetchCatalog = async (setup?: TerminalSettings): Promise<boolean> => {
-    const credentials = setup ?? dataRef.current.settings;
+    const current = dataRef.current;
+    if (setup && current.settings && setup.terminalId !== current.settings.terminalId
+        && hasPendingUploads(currentOrders(), current.synced)) {
+      setMessage({ kind: "error", text: TERMINAL_LOCKED });
+      return false;
+    }
+    const credentials = setup ?? current.settings;
     if (!credentials || !beginSync("catalog")) return false;
     try {
       let result: Awaited<ReturnType<typeof requestCatalog>>;
@@ -308,6 +320,7 @@ export function useTerminal() {
     orders,
     openOrder: openOrderOf(orders),
     unsyncedCount: unsyncedCount(orders, data.synced),
+    hasPendingUploads: hasPendingUploads(orders, data.synced),
     cancellable: cancellableOrders(orders, data.synced),
     canReprint: lastPrintable(orders) !== undefined,
     clockWarning: clockWarningText(data.settings?.clockSkewMs),

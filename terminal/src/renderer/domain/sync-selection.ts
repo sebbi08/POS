@@ -23,6 +23,12 @@ export function unsyncedCount(orders: Map<string, LocalOrder>, synced: Record<st
   return unsynced(orders, synced).filter((o) => !o.discarded).length;
 }
 
+/** Whether any closed order, discarded ones included, still waits for the upload. */
+export function hasPendingUploads(orders: Map<string, LocalOrder>, synced: Record<string, string>): boolean {
+  for (const o of orders.values()) if (o.status === "closed" && !(o.id in synced)) return true;
+  return false;
+}
+
 export function cancellableOrders(orders: Map<string, LocalOrder>, synced: Record<string, string>): LocalOrder[] {
   return unsynced(orders, synced).filter((o) => !o.discarded && !o.cancelledByOrderId && !o.cancelsOrderId);
 }

@@ -9,6 +9,9 @@ export const SAVE_SUSPECT: Message = {
   kind: "error", text: "Speichern meldete einen Fehler – Buchung ist vorhanden, bitte Speicherplatz prüfen.",
 };
 
+/** Re-setup with bookings still to upload: only server and key may change. */
+export const TERMINAL_LOCKED = "Erst alle Buchungen übertragen – Terminal kann nicht gewechselt werden";
+
 export function syncErrorText(err: unknown): string {
   return err instanceof SyncError ? err.message : "Unerwartete Antwort vom Server";
 }

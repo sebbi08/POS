@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LocalEvent, NewEvent } from "../../shared/types";
 import { cmdAddItem, cmdCancel, cmdCheckout, cmdDiscard, openOrderOf, projectOrders } from "./orders";
-import { cancellableOrders, pendingUploads, unsyncedCount } from "./sync-selection";
+import { cancellableOrders, hasPendingUploads, pendingUploads, unsyncedCount } from "./sync-selection";
 
 const NOW = "2026-11-07T10:00:00.000Z";
 const item = { id: "i1", name: "Bier", groupId: "g1", price: 2.5 };
@@ -73,6 +73,8 @@ describe("sync selection", () => {
     const orders = projectOrders(log);
     expect(unsyncedCount(orders, {})).toBe(before);
     expect(pendingUploads(log, orders, {}).map((u) => u.orderId)).toContain(d.id);
+    expect(hasPendingUploads(orders, Object.fromEntries([...orders.keys()].filter((id) => id !== d.id).map((id) => [id, NOW])))).toBe(true);
+    expect(hasPendingUploads(orders, Object.fromEntries([...orders.keys()].map((id) => [id, NOW])))).toBe(false);
   });
 
   it("selects 5000 orders with 6 events each quickly", () => {

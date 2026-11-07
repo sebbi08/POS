@@ -1,11 +1,13 @@
 import { useState } from "react";
 import type { TerminalSettings } from "../../shared/types";
-import { syncErrorText } from "../state/messages";
+import { syncErrorText, TERMINAL_LOCKED } from "../state/messages";
 import { listTerminals, normalizeServerUrl } from "../sync/client";
 
 interface Props {
   /** Current settings when re-setting up; their local preferences (printer, …) are kept. */
   initial: TerminalSettings | null;
+  /** Set while bookings wait for the upload: only this terminal may be chosen (new server or key). */
+  lockedTerminalId?: string | null;
   /** Fetches the catalog with the new credentials and stores everything on success. */
   onSetup: (candidate: TerminalSettings) => Promise<boolean>;
   /** Only offered when there is a working setup to return to. */
@@ -14,7 +16,7 @@ interface Props {
 
 const DEFAULTS = { changeCalculator: false, printer: null, paperWidth: "80" } as const;
 
-function SetupWizard({ initial, onSetup, onCancel }: Props) {
+function SetupWizard({ initial, lockedTerminalId = null, onSetup, onCancel }: Props) {
   const [address, setAddress] = useState(initial?.serverUrl ?? "");
   const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [terminals, setTerminals] = useState<{ id: string; name: string }[] | null>(null);
@@ -37,6 +39,7 @@ function SetupWizard({ initial, onSetup, onCancel }: Props) {
       setTerminals(list);
       setTerminalId(list.some((t) => t.id === initial?.terminalId) ? initial!.terminalId : null);
       if (list.length === 0) setError("Auf dem Server sind keine Terminals angelegt");
+      else if (lockedTerminalId && !list.some((t) => t.id === lockedTerminalId)) setError(TERMINAL_LOCKED);
     } catch (err) {
       setError(syncErrorText(err));
     } finally {
@@ -49,6 +52,15 @@ function SetupWizard({ initial, onSetup, onCancel }: Props) {
     setTerminals(null);
     setTerminalId(null);
     setServerUrl(null);
+  };
+
+  const chooseTerminal = (id: string) => {
+    if (lockedTerminalId && id !== lockedTerminalId) {
+      setError(TERMINAL_LOCKED);
+      return;
+    }
+    setError(null);
+    setTerminalId(id);
   };
 
   const submit = async () => {
@@ -96,7 +108,7 @@ function SetupWizard({ initial, onSetup, onCancel }: Props) {
               {terminals.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => setTerminalId(t.id)}
+                  onClick={() => chooseTerminal(t.id)}
                   aria-pressed={terminalId === t.id}
                   className={`rounded-lg py-3 px-2 font-semibold text-white ${terminalId === t.id ? "bg-blue-600" : "bg-gray-700 hover:bg-gray-600"}`}
                 >

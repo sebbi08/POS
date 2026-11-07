@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import App from "../App";
+import { useTerminal } from "../state/useTerminal";
 import { catalog, installFakeBridge, saleEvents, settings, T0 } from "./fake-bridge";
 import type { NewEvent } from "../../shared/types";
 
@@ -397,15 +398,106 @@ describe("App", () => {
     expect(printJobs).not.toHaveBeenCalled();
   });
 
-  it("settings toggle the change calculator and block re-setup while bookings are pending", async () => {
+  it("settings toggle the change calculator and allow re-setup while bookings are pending", async () => {
     setup({ settings, catalog, events: saleEvents(SALE_A) });
     fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
-    expect(screen.getByRole("button", { name: "Terminal neu einrichten" })).toBeDisabled();
-    expect(screen.getByText("Erst alle Buchungen übertragen")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Terminal neu einrichten" })).toBeEnabled();
+    expect(screen.queryByText("Erst alle Buchungen übertragen")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Druckereinstellungen")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Rückgeldrechner anzeigen"));
     await waitFor(() => expect(fake.bridge.saveSettings).toHaveBeenCalledWith({ ...settings, changeCalculator: true }));
     await waitFor(() => expect(screen.getByLabelText("Rückgeldrechner anzeigen")).toBeChecked());
+  });
+
+  it("after a key rotation the same terminal is set up again and its pending bookings are uploaded", async () => {
+    const NOT_SWITCHABLE = "Erst alle Buchungen übertragen – Terminal kann nicht gewechselt werden";
+    vi.mocked(uploadAll).mockRejectedValueOnce(new SyncError("Terminal-Schlüssel ungültig – bitte Terminal neu einrichten"));
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }, { id: "t2", name: "Grill" }]);
+    vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 0 });
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    expect(await screen.findByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    click("Buchungen übertragen");
+    expect(await screen.findByText("Terminal-Schlüssel ungültig – bitte Terminal neu einrichten")).toBeInTheDocument();
+
+    click("Einstellungen");
+    click("Terminal neu einrichten");
+    fireEvent.change(screen.getByLabelText("Serveradresse"), { target: { value: "kasse2.example" } });
+    click("Terminals laden");
+    const theke = await screen.findByRole("button", { name: "Theke 1" });
+    expect(theke).toHaveAttribute("aria-pressed", "true");
+    click("Grill");
+    expect(screen.getByText(NOT_SWITCHABLE)).toBeInTheDocument();
+    expect(theke).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Grill" })).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "key-2" } });
+    click("Einrichten & Artikel abholen");
+    expect(await screen.findByRole("button", { name: /Bier/ })).toBeInTheDocument();
+    expect(fetchCatalog).toHaveBeenCalledWith(expect.objectContaining({
+      serverUrl: "https://kasse2.example", terminalId: "t1", terminalKey: "key-2",
+    }));
+
+    vi.mocked(uploadAll).mockImplementation(async (_s, uploads) => ({
+      accepted: uploads.map((u) => u.orderId), rejected: [], clockSkewMs: null,
+    }));
+    click("Buchungen übertragen");
+    expect(await screen.findByText("1 Buchung(en) übertragen")).toBeInTheDocument();
+    expect(screen.getByText("0 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    expect(vi.mocked(uploadAll).mock.calls.at(-1)![0]).toMatchObject({
+      serverUrl: "https://kasse2.example", terminalId: "t1", terminalKey: "key-2",
+    });
+  });
+
+  it("re-setup with pending bookings refuses a server whose list lacks this terminal", async () => {
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t2", name: "Grill" }]);
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    click("Terminal neu einrichten");
+    click("Terminals laden");
+    expect(await screen.findByText("Erst alle Buchungen übertragen – Terminal kann nicht gewechselt werden")).toBeInTheDocument();
+    click("Grill");
+    expect(screen.getByRole("button", { name: "Grill" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Einrichten & Artikel abholen" })).toBeDisabled();
+  });
+
+  it("a discarded order that is not uploaded yet also keeps the terminal from being switched", async () => {
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }, { id: "t2", name: "Grill" }]);
+    const discarded: NewEvent[] = [
+      ...openOrderEvents,
+      { orderId: OPEN, type: "OrderClosed", data: { orderId: OPEN, totalGross: 7.5, totalVat: { "19": 1.2 }, totalNet: 6.3, cancelled: true }, occurredAt: T0 },
+    ];
+    setup({ settings, catalog, events: discarded });
+    expect(await screen.findByText("0 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    click("Einstellungen");
+    click("Terminal neu einrichten");
+    click("Terminals laden");
+    fireEvent.click(await screen.findByRole("button", { name: "Grill" }));
+    expect(screen.getByText("Erst alle Buchungen übertragen – Terminal kann nicht gewechselt werden")).toBeInTheDocument();
+  });
+
+  it("the setup action itself refuses another terminal while bookings are pending", async () => {
+    fake = installFakeBridge({ settings, catalog, events: saleEvents(SALE_A) });
+    const { result } = renderHook(() => useTerminal());
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    let ok: boolean | undefined;
+    await act(async () => { ok = await result.current.actions.fetchCatalog({ ...settings, terminalId: "t2" }); });
+    expect(ok).toBe(false);
+    expect(fetchCatalog).not.toHaveBeenCalled();
+    expect(result.current.message).toEqual({
+      kind: "error", text: "Erst alle Buchungen übertragen – Terminal kann nicht gewechselt werden",
+    });
+    expect(fake.state.settings).toEqual(settings);
+  });
+
+  it("re-setup without pending bookings may switch to another terminal", async () => {
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }, { id: "t2", name: "Grill" }]);
+    setup({ settings, catalog, events: saleEvents(SALE_A), synced: { [SALE_A]: T0 } });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    click("Terminal neu einrichten");
+    click("Terminals laden");
+    fireEvent.click(await screen.findByRole("button", { name: "Grill" }));
+    expect(screen.getByRole("button", { name: "Grill" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText(/Terminal kann nicht gewechselt werden/)).not.toBeInTheDocument();
   });
 
   it("re-setup opens the wizard and keeps the till's catalog when cancelled", async () => {
