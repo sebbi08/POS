@@ -62,4 +62,42 @@ describe("sync selection", () => {
     const res = cancellableOrders(orders, { [synced]: NOW }).map((o) => o.id);
     expect(res).toEqual([ok]);
   });
+
+  it("a discarded order is uploaded but does not count as unsynced", () => {
+    const log: LocalEvent[] = [];
+    sale(log);
+    const before = unsyncedCount(projectOrders(log), {});
+    log.push(...persist(cmdAddItem(undefined, "T1", item, g, NOW, newId)));
+    const d = openOrderOf(projectOrders(log))!;
+    log.push(...persist(cmdDiscard(d, NOW)));
+    const orders = projectOrders(log);
+    expect(unsyncedCount(orders, {})).toBe(before);
+    expect(pendingUploads(log, orders, {}).map((u) => u.orderId)).toContain(d.id);
+  });
+
+  it("selects 5000 orders with 6 events each quickly", () => {
+    const log: LocalEvent[] = [];
+    let s = 0;
+    const at = (orderId: string, type: string, data: Record<string, unknown>): LocalEvent =>
+      ({ orderId, type, data, occurredAt: NOW, seq: ++s }) as LocalEvent;
+    for (let i = 0; i < 5000; i++) {
+      const id = `bulk-${i}`;
+      const line = { orderId: id, itemId: "i1", name: "Bier", qty: 1, unitPrice: 2.5, vatRate: 19, vatAmount: 0.4, total: 2.5 };
+      log.push(
+        at(id, "OrderOpened", { id, terminalId: "T1" }),
+        at(id, "ItemAdded", line),
+        at(id, "ItemAdded", line),
+        at(id, "FinalReceiptPrinted", { orderId: id }),
+        at(id, "PickupReceiptPrinted", { orderId: id, itemId: "i1" }),
+        at(id, "OrderClosed", { orderId: id, totalGross: 5, totalVat: { "19": 0.8 }, totalNet: 4.2 }),
+      );
+    }
+    const orders = projectOrders(log);
+    const started = performance.now();
+    const uploads = pendingUploads(log, orders, {});
+    const elapsed = performance.now() - started;
+    expect(uploads).toHaveLength(5000);
+    expect(uploads[4999].events).toHaveLength(6);
+    expect(elapsed).toBeLessThan(200);
+  });
 });

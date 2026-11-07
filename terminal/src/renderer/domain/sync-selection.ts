@@ -9,17 +9,18 @@ function unsynced(orders: Map<string, LocalOrder>, synced: Record<string, string
 }
 
 export function pendingUploads(events: LocalEvent[], orders: Map<string, LocalOrder>, synced: Record<string, string>): BookingUpload[] {
-  const sorted = [...events].sort((a, b) => a.seq - b.seq);
-  return unsynced(orders, synced).map((o) => ({
-    orderId: o.id,
-    events: sorted
-      .filter((e) => e.orderId === o.id)
-      .map((e) => ({ type: e.type, data: e.data, occurredAt: e.occurredAt })),
-  }));
+  const byOrder = new Map<string, BookingUpload["events"]>();
+  for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
+    let list = byOrder.get(e.orderId);
+    if (!list) byOrder.set(e.orderId, (list = []));
+    list.push({ type: e.type, data: e.data, occurredAt: e.occurredAt });
+  }
+  return unsynced(orders, synced).map((o) => ({ orderId: o.id, events: byOrder.get(o.id) ?? [] }));
 }
 
+/** Bookings still to upload. Discarded orders are uploaded too but are no booking to count. */
 export function unsyncedCount(orders: Map<string, LocalOrder>, synced: Record<string, string>): number {
-  return unsynced(orders, synced).length;
+  return unsynced(orders, synced).filter((o) => !o.discarded).length;
 }
 
 export function cancellableOrders(orders: Map<string, LocalOrder>, synced: Record<string, string>): LocalOrder[] {
