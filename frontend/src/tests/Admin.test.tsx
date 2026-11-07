@@ -166,6 +166,24 @@ describe("TransactionHistory", () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/orders/abc12345-1234/cancel", expect.anything()));
   });
 
+  it("ignores a slower earlier response that arrives after a newer one", async () => {
+    let resolveFirst: (rows: unknown[]) => void = () => {};
+    const first = new Promise<unknown[]>((r) => { resolveFirst = r; });
+    let call = 0;
+    vi.mocked(api.get).mockImplementation((path: string) => {
+      if (path.startsWith("/terminals")) return Promise.resolve([]) as never;
+      call += 1;
+      return (call === 1 ? first : Promise.resolve([cancelRow])) as never;
+    });
+    render(<TransactionHistory />);
+    fireEvent.change(screen.getByLabelText("Von"), { target: { value: "2026-06-01" } });
+    await screen.findByText("Storno zu #abc12345");
+    resolveFirst([closedRow]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("button", { name: "Stornieren" })).not.toBeInTheDocument();
+    expect(screen.getByText("Storno zu #abc12345")).toBeInTheDocument();
+  });
+
   it("does not cancel when the confirmation is declined", async () => {
     mockLists([closedRow]);
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
@@ -274,6 +292,27 @@ describe("TerminalConfig", () => {
     render(<TerminalConfig />);
     fireEvent.click(await screen.findByRole("button", { name: "Neuen Schlüssel erzeugen" }));
     expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("shows an error when generating the key fails", async () => {
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+    vi.mocked(api.post).mockRejectedValueOnce(new Error("Terminal nicht gefunden"));
+    render(<TerminalConfig />);
+    fireEvent.click(await screen.findByRole("button", { name: "Neuen Schlüssel erzeugen" }));
+    expect(await screen.findByText("Terminal nicht gefunden")).toBeInTheDocument();
+  });
+
+  it("shows an error when loading the key fails", async () => {
+    vi.mocked(api.get).mockImplementation((path: string) =>
+      path === "/terminals"
+        ? (Promise.resolve([{ id: "t1", name: "Bar", groupIds: [], printPickupReceipts: true }]) as never)
+        : path === "/terminals/t1/key"
+          ? (Promise.reject(new Error("Administratorzugriff erforderlich")) as never)
+          : (Promise.resolve([]) as never),
+    );
+    render(<TerminalConfig />);
+    fireEvent.click(await screen.findByRole("button", { name: "Schlüssel anzeigen" }));
+    expect(await screen.findByText("Administratorzugriff erforderlich")).toBeInTheDocument();
   });
 
   it("shows the existing key on demand", async () => {

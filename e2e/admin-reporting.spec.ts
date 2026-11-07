@@ -129,7 +129,7 @@ test.describe("Admin — Buchungen, Auswertung, Import/Export", () => {
 
   // ── Buchungen ──────────────────────────────────────────────
 
-  test("transactions: synced sale is listed as closed, admin cancel marks it cancelled", async ({ page, request }) => {
+  test("transactions: synced sale is listed as closed, admin cancel marks it cancelled", async ({ request }) => {
     const orderId = await syncSale(request, ["Espresso", "Cappuccino"]);
 
     const list = async (status: string) => {

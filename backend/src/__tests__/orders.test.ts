@@ -209,3 +209,18 @@ describe("Orders Projections", () => {
     expect(barOrders[0].id).toBe("o1");
   });
 });
+
+describe("cancelOrder", () => {
+  it("uses the German default title when no reason is given", async () => {
+    const { cancelOrder } = await import("../modules/orders/orders.commands.js");
+    const { appendOrderEvent } = await import("../modules/orders/order-eventstore.js");
+    orders.clear();
+    orders.set("12345678-aaaa", {
+      id: "12345678-aaaa", terminalId: "t1", status: "closed", items: [],
+      totalGross: 0, totalVat: {}, totalNet: 0,
+    } as never);
+    await cancelOrder("12345678-aaaa", "t1");
+    const data = vi.mocked(appendOrderEvent).mock.calls.at(-1)![2] as { title: string };
+    expect(data.title).toBe("Storno zu Bestellung #12345678");
+  });
+});

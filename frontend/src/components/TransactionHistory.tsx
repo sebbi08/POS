@@ -28,31 +28,40 @@ function TransactionHistory() {
   const [error, setError] = useState("");
   const { terminals, nameOf } = useTerminals();
 
-  const load = () => {
+  const query = () => {
     const params = new URLSearchParams({ from, to });
     if (status !== "all") params.set("status", status);
     if (search) params.set("search", search);
     if (terminal) params.set("terminal", terminal);
-    return api
-      .get<Transaction[]>(`/reporting/transactions?${params}`)
+    return api.get<Transaction[]>(`/reporting/transactions?${params}`);
+  };
+
+  // Drops responses of superseded requests so a slow earlier one cannot overwrite newer rows.
+  useEffect(() => {
+    let stale = false;
+    query()
       .then((rows) => {
+        if (stale) return;
         setError("");
         setTransactions(rows);
       })
       .catch((e: Error) => {
+        if (stale) return;
         setTransactions([]);
         setError(e.message);
       });
-  };
-
-  useEffect(() => { load(); }, [from, to, status, search, terminal]);
+    return () => {
+      stale = true;
+    };
+  }, [from, to, status, search, terminal]);
 
   const handleCancel = async (orderId: string) => {
     if (!window.confirm(`Buchung #${orderId.slice(0, 8)} wirklich stornieren?`)) return;
     setCancelling(orderId);
     try {
       await api.post(`/orders/${orderId}/cancel`, { reason: "Storniert im Admin-Bereich" });
-      await load();
+      setTransactions(await query());
+      setError("");
     } catch (e) {
       setError((e as Error).message);
     } finally {

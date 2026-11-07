@@ -62,7 +62,7 @@ export async function cancelOrder(
     throw new Error(`Nur offene oder abgeschlossene Bestellungen können storniert werden`);
 
   const id = uuid();
-  const title = reason || `Cancellation of order #${originalOrderId}`;
+  const title = reason || `Storno zu Bestellung #${originalOrderId.slice(0, 8)}`;
 
   const items = original.items.map(
     (item: {

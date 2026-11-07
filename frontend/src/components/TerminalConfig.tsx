@@ -17,6 +17,7 @@ function TerminalConfig() {
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [groups, setGroups] = useState<ItemGroup[]>([]);
   const [form, setForm] = useState({ name: "", groupIds: [] as string[], printPickupReceipts: true });
+  const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   // Shown keys per terminal id; null means the terminal has no key yet.
   const [keys, setKeys] = useState<Record<string, string | null>>({});
@@ -39,19 +40,35 @@ function TerminalConfig() {
   };
 
   const showKey = async (id: string) => {
-    const { key } = await api.get<{ key: string | null }>(`/terminals/${id}/key`);
-    setKeys((k) => ({ ...k, [id]: key }));
+    try {
+      const { key } = await api.get<{ key: string | null }>(`/terminals/${id}/key`);
+      setKeys((k) => ({ ...k, [id]: key }));
+      setError("");
+    } catch (e) {
+      setError((e as Error).message);
+    }
   };
 
   const generateKey = async (id: string) => {
     if (!window.confirm("Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?")) return;
-    const { key } = await api.post<{ key: string }>(`/terminals/${id}/key`);
-    setKeys((k) => ({ ...k, [id]: key }));
+    try {
+      const { key } = await api.post<{ key: string }>(`/terminals/${id}/key`);
+      setKeys((k) => ({ ...k, [id]: key }));
+      setError("");
+    } catch (e) {
+      setError((e as Error).message);
+    }
   };
 
   return (
     <div>
       <h2 className="text-white text-xl font-bold mb-4">Terminals</h2>
+
+      {error && (
+        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 mb-4 text-red-300 text-sm">
+          {error}
+        </div>
+      )}
 
       <div className="bg-gray-800 rounded-xl p-4 mb-4">
         <div className="grid grid-cols-3 gap-2">
