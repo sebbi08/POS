@@ -29,7 +29,7 @@ describe("Login Page", () => {
 
   it("shows the PIN entry directly, without terminal buttons", async () => {
     render(<MemoryRouter><Login /></MemoryRouter>);
-    expect(screen.getByText("Admin Login")).toBeInTheDocument();
+    expect(screen.getByText("Administrator-Anmeldung")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.queryByText("Admin Panel")).not.toBeInTheDocument();
     expect(screen.queryByText("Bar")).not.toBeInTheDocument();
@@ -59,7 +59,7 @@ describe("Login Page", () => {
     await user.click(screen.getByText("0"));
     await user.click(screen.getByText("0"));
     await user.click(screen.getByText("0"));
-    fireEvent.click(screen.getByText("Login"));
+    fireEvent.click(screen.getByRole("button", { name: "Anmelden" }));
 
     await waitFor(() => {
       expect(api.setAdminPin).toHaveBeenCalledWith("0000");
@@ -69,7 +69,7 @@ describe("Login Page", () => {
 
   it("shows error on wrong admin PIN", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockRejectedValueOnce(new Error("Invalid PIN"));
+    vi.mocked(api.post).mockRejectedValueOnce(new Error("Ungültige PIN"));
 
     render(<MemoryRouter><Login /></MemoryRouter>);
 
@@ -77,10 +77,10 @@ describe("Login Page", () => {
     await user.click(screen.getByText("2"));
     await user.click(screen.getByText("3"));
     await user.click(screen.getByText("4"));
-    fireEvent.click(screen.getByText("Login"));
+    fireEvent.click(screen.getByRole("button", { name: "Anmelden" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Invalid PIN")).toBeInTheDocument();
+      expect(screen.getByText("Ungültige PIN")).toBeInTheDocument();
     });
   });
 });

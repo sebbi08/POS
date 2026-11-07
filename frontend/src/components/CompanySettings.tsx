@@ -29,7 +29,7 @@ function CompanySettings() {
 
   return (
     <div>
-      <h2 className="text-white text-xl font-bold mb-4">Company Settings</h2>
+      <h2 className="text-white text-xl font-bold mb-4">Firmendaten</h2>
       <div className="bg-gray-800 rounded-xl p-6 max-w-md">
         <div className="flex flex-col gap-3">
           <div>
@@ -41,7 +41,7 @@ function CompanySettings() {
             />
           </div>
           <div>
-            <label className="text-gray-400 text-sm">Address</label>
+            <label className="text-gray-400 text-sm">Adresse</label>
             <input
               className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm mt-1"
               value={form.address}
@@ -49,7 +49,7 @@ function CompanySettings() {
             />
           </div>
           <div>
-            <label className="text-gray-400 text-sm">City</label>
+            <label className="text-gray-400 text-sm">Ort</label>
             <input
               className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm mt-1"
               value={form.city}
@@ -57,7 +57,7 @@ function CompanySettings() {
             />
           </div>
           <div>
-            <label className="text-gray-400 text-sm">VAT ID</label>
+            <label className="text-gray-400 text-sm">USt-IdNr.</label>
             <input
               className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm mt-1"
               value={form.vatId}
@@ -68,7 +68,7 @@ function CompanySettings() {
             onClick={handleSave}
             className="bg-green-600 hover:bg-green-500 text-white rounded-lg py-2 text-sm font-semibold mt-2"
           >
-            {saved ? "Saved!" : "Save"}
+            {saved ? "Gespeichert!" : "Speichern"}
           </button>
         </div>
       </div>

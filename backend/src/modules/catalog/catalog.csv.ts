@@ -54,7 +54,7 @@ const EXPECTED_HEADER = ["id", "name", "group_name", "group_vat_rate", "price"];
 export function parseCsv(text: string): { rows: ImportRow[]; error?: string } {
   const trimmed = text.trimEnd();
   if (!trimmed) {
-    return { rows: [], error: "CSV file is empty" };
+    return { rows: [], error: "CSV-Datei ist leer" };
   }
 
   const lines = trimmed.split("\n");
@@ -64,7 +64,7 @@ export function parseCsv(text: string): { rows: ImportRow[]; error?: string } {
   if (missing.length > 0 || header.length !== EXPECTED_HEADER.length) {
     return {
       rows: [],
-      error: `Invalid CSV: expected columns ${EXPECTED_HEADER.join(",")}`,
+      error: `Ungültige CSV: erwartete Spalten ${EXPECTED_HEADER.join(",")}`,
     };
   }
 
@@ -82,7 +82,7 @@ export function parseCsv(text: string): { rows: ImportRow[]; error?: string } {
     if (parts.length < EXPECTED_HEADER.length) {
       return {
         rows: [],
-        error: `Row ${i + 1}: missing fields (expected ${EXPECTED_HEADER.length}, got ${parts.length})`,
+        error: `Zeile ${i + 1}: Felder fehlen (erwartet ${EXPECTED_HEADER.length}, erhalten ${parts.length})`,
       };
     }
     const row: ImportRow = {
@@ -92,18 +92,18 @@ export function parseCsv(text: string): { rows: ImportRow[]; error?: string } {
       groupVatRate: parts[groupVatRateIdx].trim(),
       price: parts[priceIdx].trim(),
     };
-    if (!row.id) return { rows: [], error: `Row ${i + 1}: missing id` };
-    if (!row.name) return { rows: [], error: `Row ${i + 1}: missing name` };
+    if (!row.id) return { rows: [], error: `Zeile ${i + 1}: id fehlt` };
+    if (!row.name) return { rows: [], error: `Zeile ${i + 1}: name fehlt` };
     if (!row.groupName)
-      return { rows: [], error: `Row ${i + 1}: missing group_name` };
+      return { rows: [], error: `Zeile ${i + 1}: group_name fehlt` };
     if (!row.groupVatRate)
-      return { rows: [], error: `Row ${i + 1}: missing group_vat_rate` };
-    if (!row.price) return { rows: [], error: `Row ${i + 1}: missing price` };
+      return { rows: [], error: `Zeile ${i + 1}: group_vat_rate fehlt` };
+    if (!row.price) return { rows: [], error: `Zeile ${i + 1}: price fehlt` };
     rows.push(row);
   }
 
   if (rows.length === 0) {
-    return { rows: [], error: "CSV file contains no data rows" };
+    return { rows: [], error: "CSV-Datei enthält keine Datenzeilen" };
   }
 
   // Check duplicate IDs in file
@@ -116,7 +116,7 @@ export function parseCsv(text: string): { rows: ImportRow[]; error?: string } {
         .filter((i) => i > 0);
       return {
         rows: [],
-        error: `Duplicate ID ${id} at rows ${indices.join(" and ")}`,
+        error: `Doppelte ID ${id} in den Zeilen ${indices.join(" und ")}`,
       };
     }
   }

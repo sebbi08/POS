@@ -6,11 +6,11 @@ const router = Router();
 router.post("/login", (req: Request, res: Response): void => {
   const { pin } = req.body;
   if (!pin || pin.length < 4) {
-    res.status(400).json({ error: "PIN required (4+ digits)" });
+    res.status(400).json({ error: "PIN erforderlich (mindestens 4 Ziffern)" });
     return;
   }
   if (pin !== config.adminPin) {
-    res.status(401).json({ error: "Invalid PIN" });
+    res.status(401).json({ error: "Ungültige PIN" });
     return;
   }
   res.json({ role: "admin" as const, pin });

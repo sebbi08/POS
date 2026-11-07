@@ -1,17 +1,28 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import CatalogManager from "../components/CatalogManager";
 import AdminLayout from "../views/AdminLayout";
 import TransactionHistory from "../components/TransactionHistory";
-import DailyOverview from "../components/DailyOverview";
+import ReportOverview from "../components/ReportOverview";
+import TerminalConfig from "../components/TerminalConfig";
+
+const emptyReport = {
+  from: "2026-05-13", to: "2026-05-13", orderCount: 0, cancelledCount: 0,
+  totalGross: 0, totalVat: 0, totalNet: 0,
+  vatByGroup: {}, byTerminal: {}, topItems: [],
+};
+
+// toLocaleString emits a non-breaking space before the currency sign; normalise for matching.
+const eur = (n: number) =>
+  n.toLocaleString("de-DE", { style: "currency", currency: "EUR" }).replace(/\s/g, " ");
 
 vi.mock("../api/client", () => ({
   api: {
     get: vi.fn((_path: string) => {
-      if (_path === "/reporting/daily") {
+      if (_path.startsWith("/reporting/summary")) {
         return Promise.resolve({
-          date: "2026-05-13", orderCount: 0, cancelledCount: 0,
+          from: "2026-05-13", to: "2026-05-13", orderCount: 0, cancelledCount: 0,
           totalGross: 0, totalVat: 0, totalNet: 0,
           vatByGroup: {}, byTerminal: {}, topItems: [],
         });
@@ -56,31 +67,28 @@ describe("CatalogManager", () => {
     render(<CatalogManager type="items" />);
     await waitFor(() => {
       expect(screen.getByText("Espresso")).toBeInTheDocument();
-      expect(screen.getByText("2.50€")).toBeInTheDocument();
+      expect(screen.getByText(eur(2.5))).toBeInTheDocument();
     });
   });
 
-  it("Delete button calls DELETE", async () => {
+  it("Löschen button calls DELETE", async () => {
     vi.mocked(api.get).mockResolvedValueOnce([
       { id: "g1", name: "Drinks", vatRate: 19 },
     ]);
     render(<CatalogManager type="groups" />);
     await waitFor(() => screen.getByText("Drinks"));
 
-    fireEvent.click(screen.getByText("Delete"));
+    fireEvent.click(screen.getByText("Löschen"));
     expect(api.delete).toHaveBeenCalledWith("/catalog/groups/g1");
   });
 });
 
 describe("AdminLayout", () => {
-  it("renders all navigation tabs", () => {
+  it("tabs are German", () => {
     render(<MemoryRouter><AdminLayout /></MemoryRouter>);
-    expect(screen.getByText("Item Groups")).toBeInTheDocument();
-    expect(screen.getByText("Items")).toBeInTheDocument();
-    expect(screen.getByText("Terminals")).toBeInTheDocument();
-    expect(screen.getByText("Company")).toBeInTheDocument();
-    expect(screen.getByText("Daily Overview")).toBeInTheDocument();
-    expect(screen.getByText("Transactions")).toBeInTheDocument();
+    for (const label of ["Auswertung", "Buchungen", "Warengruppen", "Artikel", "Terminals", "Firmendaten", "Import/Export"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
   });
 
   it("no longer has Users tab", () => {
@@ -88,21 +96,14 @@ describe("AdminLayout", () => {
     expect(screen.queryByText("Users")).not.toBeInTheDocument();
   });
 
-  it("Logout button is present", () => {
+  it("Abmelden button is present", () => {
     render(<MemoryRouter><AdminLayout /></MemoryRouter>);
-    expect(screen.getByText("Logout")).toBeInTheDocument();
+    expect(screen.getByText("Abmelden")).toBeInTheDocument();
   });
 
-  it("navigates to / when Logout clicked", () => {
-    const { container } = render(<MemoryRouter><AdminLayout /></MemoryRouter>);
-    fireEvent.click(screen.getByText("Logout"));
-    // Navigation happens via useNavigate; presence of button is sufficient test
-    expect(screen.getByText("Logout")).toBeInTheDocument();
-  });
-
-  it("renders Import/Export tab", () => {
+  it("opens on the Auswertung tab", async () => {
     render(<MemoryRouter><AdminLayout /></MemoryRouter>);
-    expect(screen.getByText("Import/Export")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Auswertung" })).toBeInTheDocument();
   });
 });
 
@@ -110,78 +111,185 @@ describe("TransactionHistory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
-  it("shows closed and cancelled orders with status badges", async () => {
-    vi.mocked(api.get).mockResolvedValueOnce([
-      { orderId: "abc12345-1234", terminalId: "Bar", items: "1x Espresso", totalGross: 2.50, status: "closed", closedAt: "2026-01-01T12:00:00Z" },
-      { orderId: "def67890-5678", terminalId: "Bar", items: "2x Latte", totalGross: -7.00, status: "cancelled", title: "Cancellation of order #abc12345", closedAt: "2026-01-01T12:05:00Z" },
-    ]);
+  const closedRow = { orderId: "abc12345-1234", terminalId: "t1", items: "1x Espresso", itemCount: 1, totalGross: 2.5, totalVat: 0.4, status: "closed", closedAt: "2026-01-01T12:00:00Z" };
+  const cancelRow = { orderId: "def67890-5678", terminalId: "t1", items: "2x Latte", itemCount: 2, totalGross: -7, totalVat: -1.1, status: "cancelled", title: "Storno zu #abc12345", cancelsOrderId: "abc12345-1234", closedAt: "2026-01-01T12:05:00Z" };
 
+  const mockLists = (rows: unknown[]) => {
+    vi.mocked(api.get).mockImplementation((path: string) =>
+      Promise.resolve(path.startsWith("/terminals") ? [{ id: "t1", name: "Bar", groupIds: [], printPickupReceipts: true }] : rows) as never,
+    );
+  };
+
+  it("shows terminal names, status badges and prices", async () => {
+    mockLists([closedRow, cancelRow]);
     render(<TransactionHistory />);
     await waitFor(() => {
-      expect(screen.getByText("closed")).toBeInTheDocument();
-      expect(screen.getByText("cancelled")).toBeInTheDocument();
-      expect(screen.getByText("Cancellation of order #abc12345")).toBeInTheDocument();
+      expect(screen.getAllByRole("cell", { name: "Bar" })).toHaveLength(2);
+      expect(screen.getByText("Storno zu #abc12345")).toBeInTheDocument();
+      expect(screen.getByText(eur(-7))).toBeInTheDocument();
+    });
+    expect(screen.getByText("Abgeschlossen", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Storniert", { selector: "span" })).toBeInTheDocument();
+  });
+
+  it("requests the selected range", async () => {
+    mockLists([]);
+    render(<TransactionHistory />);
+    fireEvent.change(screen.getByLabelText("Von"), { target: { value: "2026-06-01" } });
+    fireEvent.change(screen.getByLabelText("Bis"), { target: { value: "2026-06-02" } });
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith(expect.stringMatching(/^\/reporting\/transactions\?from=2026-06-01&to=2026-06-02(&|$)/));
     });
   });
 
-  it("has search and filter inputs", async () => {
-    vi.mocked(api.get).mockResolvedValueOnce([]);
+  it("has no open status and shows German empty state", async () => {
+    mockLists([]);
     render(<TransactionHistory />);
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText("Search by order ID or item...")).toBeInTheDocument();
-      expect(screen.getByPlaceholderText("Terminal")).toBeInTheDocument();
-    });
+    expect(await screen.findByText("Keine Buchungen gefunden")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /offen/i })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Suche nach Buchung oder Artikel...")).toBeInTheDocument();
   });
 
-  it("shows empty state when no transactions", async () => {
-    vi.mocked(api.get).mockResolvedValueOnce([]);
+  it("Stornieren is offered only for closed originals, after confirmation", async () => {
+    mockLists([closedRow, cancelRow]);
+    const confirm = vi.fn().mockReturnValue(true);
+    vi.stubGlobal("confirm", confirm);
     render(<TransactionHistory />);
-    await waitFor(() => {
-      expect(screen.getByText("No transactions found")).toBeInTheDocument();
-    });
+    const buttons = await screen.findAllByRole("button", { name: "Stornieren" });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]);
+    expect(confirm).toHaveBeenCalledWith("Buchung #abc12345 wirklich stornieren?");
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/orders/abc12345-1234/cancel", expect.anything()));
+  });
+
+  it("does not cancel when the confirmation is declined", async () => {
+    mockLists([closedRow]);
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
+    render(<TransactionHistory />);
+    fireEvent.click(await screen.findByRole("button", { name: "Stornieren" }));
+    expect(api.post).not.toHaveBeenCalled();
   });
 });
 
-describe("DailyOverview", () => {
-  it("shows summary cards and breakdown", async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({
-      date: "2026-05-13",
-      orderCount: 47,
-      cancelledCount: 2,
-      totalGross: 873.50,
-      totalVat: 112.30,
-      totalNet: 761.20,
-      vatByGroup: { "g1": { rate: 19, gross: 500, vat: 79.83 } },
-      byTerminal: { "Bar": { orderCount: 30, total: 500 } },
-      topItems: [{ itemId: "i1", name: "Espresso", count: 45 }],
-    });
+describe("ReportOverview", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    render(<DailyOverview />);
+  const mockReport = (report: unknown) => {
+    vi.mocked(api.get).mockImplementation((path: string) =>
+      Promise.resolve(
+        path.startsWith("/terminals")
+          ? [{ id: "t1", name: "Bar", groupIds: [], printPickupReceipts: true }]
+          : report,
+      ) as never,
+    );
+  };
+
+  it("report tab requests summary for selected range", async () => {
+    mockReport(emptyReport);
+    render(<ReportOverview />);
+    await screen.findByRole("heading", { name: "Auswertung" });
+    fireEvent.change(screen.getByLabelText("Von"), { target: { value: "2026-06-01" } });
+    fireEvent.change(screen.getByLabelText("Bis"), { target: { value: "2026-06-02" } });
     await waitFor(() => {
-      expect(screen.getByText("47")).toBeInTheDocument();
-      expect(screen.getByText("873.50€")).toBeInTheDocument();
-      expect(screen.getByText("Top Items")).toBeInTheDocument();
-      expect(screen.getByText(/Espresso/)).toBeInTheDocument();
+      expect(api.get).toHaveBeenCalledWith("/reporting/summary?from=2026-06-01&to=2026-06-02");
     });
   });
 
-  it("shows cancelled order warning when count > 0", async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({
-      date: "2026-05-13",
-      orderCount: 10,
-      cancelledCount: 3,
-      totalGross: 100,
-      totalVat: 10,
-      totalNet: 90,
-      vatByGroup: {},
-      byTerminal: {},
-      topItems: [],
-    });
+  it("defaults both dates to today", async () => {
+    mockReport(emptyReport);
+    render(<ReportOverview />);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    expect(screen.getByLabelText("Von")).toHaveValue(today);
+    expect(screen.getByLabelText("Bis")).toHaveValue(today);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith(`/reporting/summary?from=${today}&to=${today}`));
+  });
 
-    render(<DailyOverview />);
-    await waitFor(() => {
-      expect(screen.getByText(/3 cancelled order/)).toBeInTheDocument();
+  it("shows summary cards, terminal names and top items in German", async () => {
+    mockReport({
+      ...emptyReport,
+      orderCount: 47,
+      cancelledCount: 2,
+      totalGross: 873.5,
+      totalVat: 112.3,
+      totalNet: 761.2,
+      vatByGroup: { "19": { rate: 19, gross: 500, vat: 79.83 } },
+      byTerminal: { t1: { orderCount: 30, total: 500 } },
+      topItems: [{ itemId: "i1", name: "Espresso", count: 45 }],
     });
+    render(<ReportOverview />);
+    await waitFor(() => {
+      expect(screen.getByText("47")).toBeInTheDocument();
+      expect(screen.getByText(eur(873.5))).toBeInTheDocument();
+      expect(screen.getByText("Meistverkaufte Artikel")).toBeInTheDocument();
+      expect(screen.getByText(/Espresso/)).toBeInTheDocument();
+      expect(screen.getByText("Bar")).toBeInTheDocument();
+      expect(screen.getByText(/2 stornierte Buchung/)).toBeInTheDocument();
+    });
+  });
+
+  it("shows the backend error for an invalid range", async () => {
+    vi.mocked(api.get).mockImplementation((path: string) =>
+      path.startsWith("/terminals") ? (Promise.resolve([]) as never) : (Promise.reject(new Error("Zeitraum ungültig")) as never),
+    );
+    render(<ReportOverview />);
+    expect(await screen.findByText("Zeitraum ungültig")).toBeInTheDocument();
+  });
+});
+
+describe("TerminalConfig", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.get).mockImplementation((path: string) => {
+      if (path === "/terminals") return Promise.resolve([{ id: "t1", name: "Bar", groupIds: [], printPickupReceipts: true }]) as never;
+      if (path === "/terminals/t1/key") return Promise.resolve({ key: "oldkey-123" }) as never;
+      return Promise.resolve([]) as never;
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("terminal config shows generated key", async () => {
+    const confirm = vi.fn().mockReturnValue(true);
+    vi.stubGlobal("confirm", confirm);
+    vi.mocked(api.post).mockResolvedValueOnce({ key: "newkey-456" });
+    render(<TerminalConfig />);
+    fireEvent.click(await screen.findByRole("button", { name: "Neuen Schlüssel erzeugen" }));
+    expect(confirm).toHaveBeenCalledWith(
+      "Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?",
+    );
+    expect(await screen.findByText("newkey-456")).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledWith("/terminals/t1/key");
+  });
+
+  it("does not generate a key when the confirmation is declined", async () => {
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
+    render(<TerminalConfig />);
+    fireEvent.click(await screen.findByRole("button", { name: "Neuen Schlüssel erzeugen" }));
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("shows the existing key on demand", async () => {
+    render(<TerminalConfig />);
+    fireEvent.click(await screen.findByRole("button", { name: "Schlüssel anzeigen" }));
+    expect(await screen.findByText("oldkey-123")).toBeInTheDocument();
+  });
+
+  it("saves the Abholbons drucken setting when adding a terminal", async () => {
+    render(<TerminalConfig />);
+    await screen.findByText("Bar");
+    fireEvent.change(screen.getByPlaceholderText("Terminalname"), { target: { value: "Kasse" } });
+    fireEvent.click(screen.getByLabelText("Abholbons drucken"));
+    fireEvent.click(screen.getByRole("button", { name: "Hinzufügen" }));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/terminals", { name: "Kasse", groupIds: [], printPickupReceipts: false }),
+    );
   });
 });

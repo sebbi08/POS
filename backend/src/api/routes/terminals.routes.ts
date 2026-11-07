@@ -41,7 +41,7 @@ router.put("/:id", checkAdmin, (req: Request, res: Response): void => {
 router.delete("/:id", checkAdmin, (req: Request, res: Response): void => {
   const openOrders = getOpenOrdersByTerminal(req.params.id as string);
   if (openOrders.length > 0) {
-    res.status(409).json({ error: "Cannot delete terminal with open orders" });
+    res.status(409).json({ error: "Terminal mit offenen Bestellungen kann nicht gelöscht werden" });
     return;
   }
   deleteTerminal(req.params.id as string).then(() => res.json({ status: "deleted" }));
@@ -51,7 +51,7 @@ router.get("/:id/key", checkAdmin, (req: Request, res: Response): void => {
   const id = req.params.id as string;
   getTerminal(id).then(async (terminal) => {
     if (!terminal) {
-      res.status(404).json({ error: "Terminal not found" });
+      res.status(404).json({ error: "Terminal nicht gefunden" });
       return;
     }
     res.json({ key: await getTerminalKey(id) });
@@ -62,7 +62,7 @@ router.post("/:id/key", checkAdmin, (req: Request, res: Response): void => {
   const id = req.params.id as string;
   getTerminal(id).then(async (terminal) => {
     if (!terminal) {
-      res.status(404).json({ error: "Terminal not found" });
+      res.status(404).json({ error: "Terminal nicht gefunden" });
       return;
     }
     res.json({ key: await generateTerminalKey(id) });

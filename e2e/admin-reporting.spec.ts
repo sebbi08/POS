@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
 const API = "http://localhost:3001/api";
 const ADMIN = { "Content-Type": "application/json", "x-admin-pin": "0000" };
 
-test.describe("Admin — Transactions, Daily Overview, Import/Export", () => {
+test.describe("Admin — Buchungen, Auswertung, Import/Export", () => {
   const terminalName = `E2E-Admin-Terminal-${Date.now()}`;
   let terminalId = "";
   let terminalKey = "";
@@ -115,22 +115,19 @@ test.describe("Admin — Transactions, Daily Overview, Import/Export", () => {
   });
 
   const loginToAdmin = async (page: any) => {
-    await expect(page.getByText("Admin Login")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Administrator-Anmeldung")).toBeVisible({ timeout: 5000 });
     for (const d of "0000") {
       await page.getByText(d, { exact: true }).click();
     }
-    await page.getByRole("button", { name: "Login" }).click();
-    await expect(page.getByRole("heading", { name: "Admin Panel" })).toBeVisible({ timeout: 5000 });
+    await page.getByRole("button", { name: "Anmelden" }).click();
+    await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible({ timeout: 5000 });
   };
 
-  // The Transactions and Daily Overview views still call the pre-range endpoints
-  // until Task 6 (range UI), so their contents are checked through the reporting
-  // API here; Task 6 restores the UI assertions.
   const dayOffset = (days: number) =>
     new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
   const range = () => `from=${dayOffset(-1)}&to=${dayOffset(1)}`;
 
-  // ── Transactions ──────────────────────────────────────────────
+  // ── Buchungen ──────────────────────────────────────────────
 
   test("transactions: synced sale is listed as closed, admin cancel marks it cancelled", async ({ page, request }) => {
     const orderId = await syncSale(request, ["Espresso", "Cappuccino"]);
@@ -164,15 +161,39 @@ test.describe("Admin — Transactions, Daily Overview, Import/Export", () => {
       .toBeTruthy();
     expect((await list("closed")).some((t) => t.orderId === orderId)).toBeFalsy();
 
-    // The admin panel opens and offers the Transactions tab.
-    await page.goto("/");
-    await loginToAdmin(page);
-    await expect(page.getByRole("button", { name: "Transactions" })).toBeVisible();
   });
 
-  // ── Daily Overview ────────────────────────────────────────────
+  test("buchungen: UI lists the sale with terminal name and cancels it after confirmation", async ({ page, request }) => {
+    const orderId = await syncSale(request, ["Espresso"]);
+    const shortId = orderId.slice(0, 8);
 
-  test("daily overview: report totals, VAT, by-terminal, top items", async ({ request }) => {
+    await loginToAdmin(page);
+    await page.getByRole("button", { name: "Buchungen" }).click();
+    await page.getByLabel("Terminal", { exact: true }).selectOption({ label: terminalName });
+
+    const row = page.getByRole("row").filter({ hasText: shortId }).filter({ hasText: "Abgeschlossen" });
+    await expect(async () => {
+      await page.getByLabel("Von").fill(dayOffset(-1));
+      await expect(row).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 10000 });
+    await expect(row).toContainText(terminalName);
+    await expect(row).toContainText("1x Espresso");
+
+    page.once("dialog", (dialog) => {
+      expect(dialog.message()).toBe(`Buchung #${shortId} wirklich stornieren?`);
+      dialog.accept();
+    });
+    await row.getByRole("button", { name: "Stornieren" }).click();
+
+    await expect(
+      page.getByRole("row").filter({ hasText: shortId }).filter({ hasText: "Storniert" }),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(row.getByRole("button", { name: "Stornieren" })).toHaveCount(0);
+  });
+
+  // ── Auswertung ────────────────────────────────────────────
+
+  test("auswertung: report totals, VAT, by-terminal, top items", async ({ page, request }) => {
     await syncSale(request, ["Cookie"]);
     await syncSale(request, ["Cookie"]);
 
@@ -187,6 +208,40 @@ test.describe("Admin — Transactions, Daily Overview, Import/Export", () => {
     expect(report.vatByGroup[String(vatRate)]).toBeTruthy();
     expect(report.byTerminal[terminalId].orderCount).toBeGreaterThanOrEqual(2);
     expect(report.topItems.some((i: { name: string }) => i.name === "Cookie")).toBeTruthy();
+
+    // The same figures are shown in the UI, with the terminal name instead of its id.
+    await loginToAdmin(page);
+    await expect(page.getByRole("heading", { name: "Auswertung" })).toBeVisible();
+    await expect(page.getByText("Meistverkaufte Artikel")).toBeVisible();
+    await expect(page.getByText(terminalName)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/Cookie/)).toBeVisible();
+    await expect(page.getByText("19% MwSt.")).toBeVisible();
+  });
+
+  test("auswertung: invalid range shows the backend error", async ({ page }) => {
+    await loginToAdmin(page);
+    await expect(page.getByRole("heading", { name: "Auswertung" })).toBeVisible();
+    await page.getByLabel("Von").fill("2099-01-02");
+    await page.getByLabel("Bis").fill("2099-01-01");
+    await expect(page.getByText("Zeitraum ungültig")).toBeVisible({ timeout: 5000 });
+  });
+
+  test("terminals: show and regenerate key after confirmation", async ({ page }) => {
+    await loginToAdmin(page);
+    await page.getByRole("button", { name: "Terminals", exact: true }).click();
+    const card = page.locator("div.bg-gray-800").filter({ hasText: terminalName }).filter({ has: page.getByRole("button", { name: "Schlüssel anzeigen" }) });
+    await card.getByRole("button", { name: "Schlüssel anzeigen" }).click();
+    await expect(card.getByText(terminalKey)).toBeVisible();
+
+    page.once("dialog", (dialog) => {
+      expect(dialog.message()).toBe(
+        "Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?",
+      );
+      dialog.accept();
+    });
+    await card.getByRole("button", { name: "Neuen Schlüssel erzeugen" }).click();
+    await expect(card.getByText(terminalKey)).toHaveCount(0);
+    await expect(card.locator("code")).toBeVisible();
   });
 
   // ── Import/Export ─────────────────────────────────────────────
@@ -218,23 +273,23 @@ test.describe("Admin — Transactions, Daily Overview, Import/Export", () => {
     await page.waitForTimeout(300);
 
     // Click Preview
-    await page.getByRole("button", { name: "Preview" }).click();
+    await page.getByRole("button", { name: "Vorschau" }).click();
     await page.waitForTimeout(500);
 
     // Verify preview shows items to create (groups may be new or existing)
-    await expect(page.getByText("Items to Create")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Artikel anlegen")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Muffin")).toBeVisible();
     await expect(page.getByText("Brownie")).toBeVisible();
 
     // Click Confirm Import
-    await page.getByRole("button", { name: "Confirm Import" }).click();
+    await page.getByRole("button", { name: "Import bestätigen" }).click();
     await page.waitForTimeout(500);
 
     // Verify success message
-    await expect(page.getByText(/Created.*items/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Artikel erstellt/)).toBeVisible({ timeout: 5000 });
 
     // Navigate to Items tab to verify imported items exist
-    await page.getByRole("button", { name: "Items" }).click();
+    await page.getByRole("button", { name: "Artikel", exact: true }).click();
     await page.waitForTimeout(500);
 
     await expect(page.getByText("Muffin")).toBeVisible({ timeout: 5000 });

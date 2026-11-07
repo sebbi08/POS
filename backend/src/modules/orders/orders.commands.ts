@@ -13,7 +13,7 @@ export async function closeOrder(
   opts?: { cancelled?: boolean },
 ): Promise<void> {
   const order = orders.get(orderId);
-  if (!order) throw new Error(`Order ${orderId} not found`);
+  if (!order) throw new Error(`Bestellung ${orderId} nicht gefunden`);
 
   const totalGross = order.items.reduce(
     (sum: number, i: { total: number }) => sum + i.total,
@@ -48,8 +48,8 @@ export async function cancelOrder(
   reason?: string,
 ): Promise<string> {
   const original = orders.get(originalOrderId);
-  if (!original) throw new Error(`Order ${originalOrderId} not found`);
-  if (original.cancelledByOrderId) throw new Error(`Order already cancelled`);
+  if (!original) throw new Error(`Bestellung ${originalOrderId} nicht gefunden`);
+  if (original.cancelledByOrderId) throw new Error(`Bestellung bereits storniert`);
 
   // Open orders: just close them (discard, no financial record needed)
   if (original.status === "open") {
@@ -59,7 +59,7 @@ export async function cancelOrder(
 
   // Closed orders: create a separate cancellation order with negated values
   if (original.status !== "closed")
-    throw new Error(`Only open or closed orders can be cancelled`);
+    throw new Error(`Nur offene oder abgeschlossene Bestellungen können storniert werden`);
 
   const id = uuid();
   const title = reason || `Cancellation of order #${originalOrderId}`;

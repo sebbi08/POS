@@ -107,7 +107,7 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       if (!req.file) {
-        res.status(400).json({ error: "No file uploaded" });
+        res.status(400).json({ error: "Keine Datei hochgeladen" });
         return;
       }
 
@@ -139,11 +139,11 @@ router.post(
         const rowNum = i + 2;
         if (isNaN(parseFloat(r.groupVatRate))) {
           errors.push(
-            `Row ${rowNum}: invalid group_vat_rate "${r.groupVatRate}"`,
+            `Zeile ${rowNum}: ungültiger group_vat_rate "${r.groupVatRate}"`,
           );
         }
         if (isNaN(parseFloat(r.price))) {
-          errors.push(`Row ${rowNum}: invalid price "${r.price}"`);
+          errors.push(`Zeile ${rowNum}: ungültiger Preis "${r.price}"`);
         }
       }
 
@@ -166,7 +166,7 @@ router.post(
           if (existing) {
             if (existing.vatRate !== vatRate) {
               errors.push(
-                `Group "${r.groupName}" exists with VAT ${existing.vatRate}%, import has ${vatRate}%`,
+                `Warengruppe "${r.groupName}" existiert mit ${existing.vatRate}% MwSt., Import enthält ${vatRate}%`,
               );
             }
             groupMap.set(r.groupName, {

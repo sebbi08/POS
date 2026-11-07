@@ -53,7 +53,7 @@ async function globalSetup() {
     cwd: "backend",
     env: { ...process.env, DATABASE_URL: "postgresql://pos:pos@localhost:5432/pos_e2e", ADMIN_PIN: "0000" },
     stdio: "pipe",
-    detached: false,
+    detached: true, // own process group so teardown can kill the whole tree
   });
   backend.stdout?.on("data", (d: Buffer) => process.stdout.write(d));
   backend.stderr?.on("data", (d: Buffer) => process.stderr.write(d));
@@ -65,7 +65,7 @@ async function globalSetup() {
   const frontend = spawn("npx", ["vite", "--port", "5173"], {
     cwd: "frontend",
     stdio: "pipe",
-    detached: false,
+    detached: true, // own process group so teardown can kill the whole tree
   });
   frontend.stdout?.on("data", (d: Buffer) => process.stdout.write(d));
   frontend.stderr?.on("data", (d: Buffer) => process.stderr.write(d));

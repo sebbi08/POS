@@ -21,7 +21,7 @@ function Login() {
       api.setAdminPin(pin);
       navigate("/admin");
     } catch {
-      setError("Invalid PIN");
+      setError("Ungültige PIN");
       setPin("");
     }
     setLoading(false);
@@ -30,7 +30,7 @@ function Login() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white text-lg">
-        Loading...
+        Lädt...
       </div>
     );
   }
@@ -38,8 +38,8 @@ function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="bg-gray-800 rounded-2xl p-8 w-96 shadow-2xl">
-        <h1 className="text-white text-2xl font-bold text-center mb-2">Admin Login</h1>
-        <p className="text-gray-400 text-xs text-center mb-4">Enter admin PIN</p>
+        <h1 className="text-white text-2xl font-bold text-center mb-2">Administrator-Anmeldung</h1>
+        <p className="text-gray-400 text-xs text-center mb-4">Administrator-PIN eingeben</p>
 
         {error && (
           <div className="bg-red-500/20 text-red-300 rounded-lg p-3 mb-4 text-center text-sm">
@@ -69,11 +69,11 @@ function Login() {
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => { setPin(""); setError(""); }}
             className="bg-gray-600 hover:bg-gray-500 text-white rounded-lg py-3 text-sm">
-            Clear
+            Löschen
           </button>
           <button onClick={handleAdminLogin} disabled={pin.length < 4 || loading}
             className="bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white rounded-lg py-3 text-sm font-semibold disabled:cursor-not-allowed">
-            {loading ? "..." : "Login"}
+            {loading ? "..." : "Anmelden"}
           </button>
         </div>
       </div>

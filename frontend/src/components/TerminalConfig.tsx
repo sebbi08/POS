@@ -5,6 +5,7 @@ interface Terminal {
   id: string;
   name: string;
   groupIds: string[];
+  printPickupReceipts: boolean;
 }
 
 interface ItemGroup {
@@ -15,8 +16,10 @@ interface ItemGroup {
 function TerminalConfig() {
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [groups, setGroups] = useState<ItemGroup[]>([]);
-  const [form, setForm] = useState({ name: "", groupIds: [] as string[] });
+  const [form, setForm] = useState({ name: "", groupIds: [] as string[], printPickupReceipts: true });
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Shown keys per terminal id; null means the terminal has no key yet.
+  const [keys, setKeys] = useState<Record<string, string | null>>({});
 
   const load = () => {
     api.get<Terminal[]>("/terminals").then(setTerminals);
@@ -26,13 +29,24 @@ function TerminalConfig() {
   useEffect(() => { load(); }, []);
 
   const resetForm = () => {
-    setForm({ name: "", groupIds: [] });
+    setForm({ name: "", groupIds: [], printPickupReceipts: true });
     setEditingId(null);
   };
 
   const startEdit = (t: Terminal) => {
     setEditingId(t.id);
-    setForm({ name: t.name, groupIds: [...t.groupIds] });
+    setForm({ name: t.name, groupIds: [...t.groupIds], printPickupReceipts: t.printPickupReceipts });
+  };
+
+  const showKey = async (id: string) => {
+    const { key } = await api.get<{ key: string | null }>(`/terminals/${id}/key`);
+    setKeys((k) => ({ ...k, [id]: key }));
+  };
+
+  const generateKey = async (id: string) => {
+    if (!window.confirm("Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?")) return;
+    const { key } = await api.post<{ key: string }>(`/terminals/${id}/key`);
+    setKeys((k) => ({ ...k, [id]: key }));
   };
 
   return (
@@ -43,7 +57,7 @@ function TerminalConfig() {
         <div className="grid grid-cols-3 gap-2">
           <input
             className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
-            placeholder="Terminal name"
+            placeholder="Terminalname"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
@@ -69,6 +83,14 @@ function TerminalConfig() {
               </button>
             ))}
           </div>
+          <label className="flex items-center gap-2 text-gray-300 text-sm">
+            <input
+              type="checkbox"
+              checked={form.printPickupReceipts}
+              onChange={(e) => setForm({ ...form, printPickupReceipts: e.target.checked })}
+            />
+            Abholbons drucken
+          </label>
           {editingId ? (
             <>
               <button
@@ -76,19 +98,20 @@ function TerminalConfig() {
                   await api.put(`/terminals/${editingId}`, {
                     name: form.name,
                     groupIds: form.groupIds,
+                    printPickupReceipts: form.printPickupReceipts,
                   });
                   resetForm();
                   load();
                 }}
                 className="bg-green-600 hover:bg-green-500 text-white rounded px-3 py-2 text-sm"
               >
-                Save
+                Speichern
               </button>
               <button
                 onClick={resetForm}
                 className="bg-gray-600 hover:bg-gray-500 text-white rounded px-3 py-2 text-sm"
               >
-                Cancel
+                Abbrechen
               </button>
             </>
           ) : (
@@ -97,13 +120,14 @@ function TerminalConfig() {
                 await api.post("/terminals", {
                   name: form.name,
                   groupIds: form.groupIds,
+                  printPickupReceipts: form.printPickupReceipts,
                 });
                 resetForm();
                 load();
               }}
               className="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 py-2 text-sm"
             >
-              Add
+              Hinzufügen
             </button>
           )}
         </div>
@@ -118,24 +142,46 @@ function TerminalConfig() {
             <div>
               <div className="text-white font-medium">{t.name}</div>
               <div className="text-gray-400 text-xs mt-1">
-                Groups:{" "}
+                Warengruppen:{" "}
                 {t.groupIds
                   .map((gid) => groups.find((g) => g.id === gid)?.name ?? "")
                   .join(", ")}
               </div>
+              {t.id in keys && (
+                <div className="text-xs mt-2 text-gray-300">
+                  Schlüssel:{" "}
+                  {keys[t.id] ? (
+                    <code className="bg-gray-700 rounded px-1 select-all">{keys[t.id]}</code>
+                  ) : (
+                    "Noch kein Schlüssel erzeugt"
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => showKey(t.id)}
+                className="text-gray-300 hover:text-white text-sm"
+              >
+                Schlüssel anzeigen
+              </button>
+              <button
+                onClick={() => generateKey(t.id)}
+                className="text-amber-400 hover:text-amber-300 text-sm"
+              >
+                Neuen Schlüssel erzeugen
+              </button>
               <button
                 onClick={() => startEdit(t)}
                 className="text-blue-400 hover:text-blue-300 text-sm"
               >
-                Edit
+                Bearbeiten
               </button>
               <button
                 onClick={() => api.delete(`/terminals/${t.id}`).then(load)}
                 className="text-red-400 hover:text-red-300 text-sm"
               >
-                Delete
+                Löschen
               </button>
             </div>
           </div>

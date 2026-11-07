@@ -8,7 +8,7 @@ export function checkAdmin(
 ): void {
   const pin = req.headers["x-admin-pin"] as string;
   if (!pin || pin !== config.adminPin) {
-    res.status(403).json({ error: "Admin access required" });
+    res.status(403).json({ error: "Administratorzugriff erforderlich" });
     return;
   }
   next();

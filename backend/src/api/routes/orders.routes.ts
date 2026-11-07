@@ -12,7 +12,7 @@ router.post(
     const { reason } = req.body;
     const order = orders.get(req.params.id as string);
     if (!order) {
-      res.status(404).json({ error: "Order not found" });
+      res.status(404).json({ error: "Bestellung nicht gefunden" });
       return;
     }
     cancelOrder(req.params.id as string, order.terminalId, reason)

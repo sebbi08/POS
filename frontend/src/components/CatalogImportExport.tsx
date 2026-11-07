@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
+import { formatEuro } from "../lib/format";
 
 interface ItemGroup {
   id: string;
@@ -100,9 +101,9 @@ function CatalogImportExport() {
     try {
       const data = await api.upload<ImportPreview>("/catalog/import", file, { dryRun: "false" });
       setPreview(data);
-      setResult(`Created ${data.groupsCreated || 0} groups, ${data.itemsCreated || 0} items, updated ${data.itemsUpdated || 0} items.`);
+      setResult(`${data.groupsCreated || 0} Warengruppen und ${data.itemsCreated || 0} Artikel erstellt, ${data.itemsUpdated || 0} Artikel aktualisiert.`);
     } catch (e: any) {
-      setResult(`Error: ${e.message}`);
+      setResult(`Fehler: ${e.message}`);
     } finally {
       setLoading(false);
     }
@@ -113,7 +114,7 @@ function CatalogImportExport() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-white text-xl font-bold mb-4">Export Catalog</h2>
+        <h2 className="text-white text-xl font-bold mb-4">Katalog exportieren</h2>
         <div className="bg-gray-800 rounded-xl p-4">
           <div className="flex items-center gap-3 flex-wrap">
             <select
@@ -121,7 +122,7 @@ function CatalogImportExport() {
               value={selectedGroupId}
               onChange={(e) => setSelectedGroupId(e.target.value)}
             >
-              <option value="">All groups</option>
+              <option value="">Alle Warengruppen</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>{g.name}</option>
               ))}
@@ -131,20 +132,20 @@ function CatalogImportExport() {
               disabled={loading}
               className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded px-4 py-2 text-sm"
             >
-              Download CSV
+              CSV herunterladen
             </button>
             <button
               onClick={generateSample}
               className="bg-gray-600 hover:bg-gray-500 text-white rounded px-4 py-2 text-sm"
             >
-              Download Sample CSV
+              Beispiel-CSV herunterladen
             </button>
           </div>
         </div>
       </div>
 
       <div>
-        <h2 className="text-white text-xl font-bold mb-4">Import Catalog</h2>
+        <h2 className="text-white text-xl font-bold mb-4">Katalog importieren</h2>
         <div className="bg-gray-800 rounded-xl p-4 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <input
@@ -162,11 +163,11 @@ function CatalogImportExport() {
               disabled={!file || loading}
               className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded px-4 py-2 text-sm"
             >
-              Preview
+              Vorschau
             </button>
           </div>
 
-          {loading && <div className="text-gray-400 text-sm">Processing...</div>}
+          {loading && <div className="text-gray-400 text-sm">Verarbeitung läuft...</div>}
 
           {result && (
             <div className="bg-green-900/30 border border-green-700 rounded-lg p-3">
@@ -179,13 +180,13 @@ function CatalogImportExport() {
               {preview.groupsToCreate.length > 0 && (
                 <div>
                   <h3 className="text-blue-400 text-sm font-semibold mb-2">
-                    Groups to Create ({preview.groupsToCreate.length})
+                    Warengruppen anlegen ({preview.groupsToCreate.length})
                   </h3>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-gray-400 border-b border-gray-700">
                         <th className="text-left py-1">Name</th>
-                        <th className="text-right py-1">VAT</th>
+                        <th className="text-right py-1">MwSt.</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -203,15 +204,15 @@ function CatalogImportExport() {
               {preview.itemsToCreate.length > 0 && (
                 <div>
                   <h3 className="text-green-400 text-sm font-semibold mb-2">
-                    Items to Create ({preview.itemsToCreate.length})
+                    Artikel anlegen ({preview.itemsToCreate.length})
                   </h3>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-gray-400 border-b border-gray-700">
                         <th className="text-left py-1">ID</th>
                         <th className="text-left py-1">Name</th>
-                        <th className="text-left py-1">Group</th>
-                        <th className="text-right py-1">Price</th>
+                        <th className="text-left py-1">Warengruppe</th>
+                        <th className="text-right py-1">Preis</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -220,7 +221,7 @@ function CatalogImportExport() {
                           <td className="text-green-300 py-1 font-mono">{shortId(item.id)}</td>
                           <td className="text-green-300 py-1">{item.name}</td>
                           <td className="text-green-300 py-1">{item.groupName}</td>
-                          <td className="text-green-300 text-right py-1">{item.price.toFixed(2)}€</td>
+                          <td className="text-green-300 text-right py-1">{formatEuro(item.price)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -231,15 +232,15 @@ function CatalogImportExport() {
               {preview.itemsToUpdate.length > 0 && (
                 <div>
                   <h3 className="text-yellow-400 text-sm font-semibold mb-2">
-                    Items to Update ({preview.itemsToUpdate.length})
+                    Artikel aktualisieren ({preview.itemsToUpdate.length})
                   </h3>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-gray-400 border-b border-gray-700">
                         <th className="text-left py-1">ID</th>
                         <th className="text-left py-1">Name</th>
-                        <th className="text-left py-1">Group</th>
-                        <th className="text-right py-1">Price</th>
+                        <th className="text-left py-1">Warengruppe</th>
+                        <th className="text-right py-1">Preis</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -253,7 +254,7 @@ function CatalogImportExport() {
                             <span className="text-gray-500 line-through">{item.oldGroupName}</span> → {item.groupName}
                           </td>
                           <td className="text-yellow-300 text-right py-1">
-                            <span className="text-gray-500 line-through">{item.oldPrice.toFixed(2)}€</span> → {item.price.toFixed(2)}€
+                            <span className="text-gray-500 line-through">{formatEuro(item.oldPrice)}</span> → {formatEuro(item.price)}
                           </td>
                         </tr>
                       ))}
@@ -264,7 +265,7 @@ function CatalogImportExport() {
 
               {preview.errors.length > 0 && (
                 <div className="bg-red-900/30 border border-red-700 rounded-lg p-3">
-                  <h3 className="text-red-400 text-sm font-semibold mb-1">Errors</h3>
+                  <h3 className="text-red-400 text-sm font-semibold mb-1">Fehler</h3>
                   {preview.errors.map((err, i) => (
                     <p key={i} className="text-red-300 text-xs">{err}</p>
                   ))}
@@ -277,12 +278,12 @@ function CatalogImportExport() {
                   disabled={loading}
                   className="bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white rounded px-4 py-2 text-sm"
                 >
-                  Confirm Import
+                  Import bestätigen
                 </button>
               )}
 
               {preview.errors.length === 0 && preview.itemsToCreate.length === 0 && preview.itemsToUpdate.length === 0 && preview.groupsToCreate.length === 0 && (
-                <p className="text-gray-400 text-sm">No changes to apply.</p>
+                <p className="text-gray-400 text-sm">Keine Änderungen vorhanden.</p>
               )}
             </div>
           )}

@@ -60,7 +60,7 @@ describe("Auth Routes", () => {
       .post("/api/auth/login")
       .send({ pin: "wrong" });
     expect(res.status).toBe(401);
-    expect(res.body.error).toContain("Invalid PIN");
+    expect(res.body.error).toContain("Ungültige PIN");
   });
 
   it("POST /api/auth/login with short PIN returns 400", async () => {
@@ -167,7 +167,7 @@ describe("Terminal Delete Constraint", () => {
       .set("x-admin-pin", "0000");
 
     expect(res.status).toBe(409);
-    expect(res.body.error).toContain("Cannot delete terminal with open orders");
+    expect(res.body.error).toContain("Terminal mit offenen Bestellungen kann nicht gelöscht werden");
   });
 
   it("DELETE /api/terminals/:id succeeds when terminal has no open orders", async () => {
