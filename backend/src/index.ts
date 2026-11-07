@@ -4,7 +4,6 @@ import { config } from "./config.js";
 import { initTables } from "./db.js";
 import { initAuthProjections } from "./modules/auth/auth.projections.js";
 import { initOrderProjections } from "./modules/orders/orders.projections.js";
-import { initReportingProjections } from "./modules/reporting/reporting.projections.js";
 import { startProjections } from "./projections/runner.js";
 
 import authRoutes from "./api/routes/auth.routes.js";
@@ -40,7 +39,6 @@ startupLog("Registering projections…");
 const projStart = Date.now();
 initAuthProjections();
 initOrderProjections();
-initReportingProjections();
 startupLog(`  Projections registered in ${Date.now() - projStart}ms`);
 
 startupLog("Initializing database tables…");

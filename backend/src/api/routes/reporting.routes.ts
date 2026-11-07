@@ -1,8 +1,7 @@
 import { Request, Response, Router } from "express";
-import { orders } from "../../modules/orders/orders.projections.js";
 import {
-  getDailyReport,
-  transactionHistory,
+  getReport,
+  listTransactions,
 } from "../../modules/reporting/reporting.projections.js";
 import { checkAdmin } from "../middleware/auth.middleware.js";
 
@@ -10,54 +9,42 @@ const router = Router();
 
 router.use(checkAdmin);
 
-router.get("/daily", (req: Request, res: Response): void => {
-  const date = req.query.date as string | undefined;
-  res.json(getDailyReport(date));
+function isDay(v: unknown): v is string {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !isNaN(d.getTime()) && d.toISOString().startsWith(v);
+}
+
+function parseRange(
+  req: Request,
+  res: Response,
+): { from: string; to: string } | null {
+  const { from, to } = req.query;
+  if (!isDay(from) || !isDay(to) || from > to) {
+    res.status(400).json({ error: "Zeitraum ungültig" });
+    return null;
+  }
+  return { from, to };
+}
+
+router.get("/summary", (req: Request, res: Response): void => {
+  const range = parseRange(req, res);
+  if (!range) return;
+  res.json(getReport(range.from, range.to));
 });
 
 router.get("/transactions", (req: Request, res: Response): void => {
-  let result = [...transactionHistory];
-
-  for (const order of orders.values()) {
-    if (order.status === "open" && !order.cancelsOrderId) {
-      const itemsText = order.items
-        .map((i) => `${i.qty}x ${i.name}`)
-        .join(", ");
-      const total = order.items.reduce((sum, i) => sum + i.total, 0);
-      result.push({
-        orderId: order.id,
-        terminalId: order.terminalId,
-        items: itemsText,
-        itemCount: order.items.length,
-        totalGross: Math.round(total * 100) / 100,
-        totalVat: 0,
-        status: "open",
-        closedAt: "",
-      });
-    }
-  }
-
-  const status = req.query.status as string;
-  if (status && status !== "all") {
-    result = result.filter((t) => t.status === status);
-  }
-
-  const terminal = req.query.terminal as string;
-  if (terminal) {
-    result = result.filter((t) => t.terminalId === terminal);
-  }
-
-  const search = req.query.search as string;
-  if (search) {
-    const s = search.toLowerCase();
-    result = result.filter(
-      (t) =>
-        t.orderId.toLowerCase().includes(s) ||
-        t.items.toLowerCase().includes(s),
-    );
-  }
-
-  res.json(result);
+  const range = parseRange(req, res);
+  if (!range) return;
+  const status = req.query.status;
+  res.json(
+    listTransactions({
+      ...range,
+      status: status === "closed" || status === "cancelled" ? status : "all",
+      terminal: req.query.terminal as string | undefined,
+      search: req.query.search as string | undefined,
+    }),
+  );
 });
 
 export default router;

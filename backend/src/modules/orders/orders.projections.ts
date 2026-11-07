@@ -18,6 +18,7 @@ export function initOrderProjections(): void {
           totalVat: {},
           totalNet: 0,
           createdAt: event.occurredAt,
+          discarded: false,
         });
         break;
       }
@@ -70,6 +71,7 @@ export function initOrderProjections(): void {
           order.totalVat = data.totalVat as Record<number, number>;
           order.totalNet = data.totalNet as number;
           order.closedAt = event.occurredAt;
+          order.discarded = data.cancelled === true;
         }
         break;
       }
@@ -95,6 +97,7 @@ export function initOrderProjections(): void {
           closedAt: new Date(data.closedAt as string),
           title: data.title as string,
           cancelsOrderId: data.cancelsOrderId as string,
+          discarded: false,
         };
         orders.set(order.id, order);
 

@@ -1,5 +1,6 @@
-export interface DailyReport {
-  date: string;
+export interface Report {
+  from: string;
+  to: string;
   orderCount: number;
   cancelledCount: number;
   totalGross: number;

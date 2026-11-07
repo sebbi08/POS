@@ -24,6 +24,7 @@ export interface Order {
   title?: string;
   cancelsOrderId?: string;
   cancelledByOrderId?: string;
+  discarded: boolean;
 }
 
 export interface OrderOpenedEvent {

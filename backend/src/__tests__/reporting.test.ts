@@ -1,3 +1,5 @@
+import express from "express";
+import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../db", () => ({
@@ -30,106 +32,166 @@ vi.mock("../config", () => ({
   },
 }));
 
+import reportingRoutes from "../api/routes/reporting.routes.js";
 import {
   initOrderProjections,
   orders,
 } from "../modules/orders/orders.projections.js";
 import {
-  dailyReport,
-  getDailyReport,
-  initReportingProjections,
-  itemCounts,
-  transactionHistory,
+  getReport,
+  listTransactions,
 } from "../modules/reporting/reporting.projections.js";
 import { registerProjection } from "../projections/runner.js";
 
-describe("Reporting Projections", () => {
-  let orderHandler: (event: any, streamId: string) => void;
-  let reportHandler: (event: any, streamId: string) => void;
+type Item = {
+  itemId: string;
+  name: string;
+  qty: number;
+  unitPrice: number;
+  vatRate: number;
+  vatAmount: number;
+  total: number;
+};
 
-  function reset() {
-    orders.clear();
-    transactionHistory.length = 0;
-    itemCounts.clear();
-    dailyReport.orderCount = 0;
-    dailyReport.cancelledCount = 0;
-    dailyReport.totalGross = 0;
-    dailyReport.totalVat = 0;
-    dailyReport.totalNet = 0;
-    dailyReport.vatByGroup = {};
-    dailyReport.byTerminal = {};
-  }
+const espresso = (qty: number, vatRate = 19): Item => ({
+  itemId: "i1",
+  name: "Espresso",
+  qty,
+  unitPrice: 2.5,
+  vatRate,
+  vatAmount: 0.4 * qty,
+  total: 2.5 * qty,
+});
+
+describe("Reporting", () => {
+  let orderHandler: (event: any, streamId: string) => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    reset();
+    orders.clear();
     initOrderProjections();
-    const orderMock = vi.mocked(registerProjection).mock.calls;
-    orderHandler = orderMock.find((c) => c[0] === "orders")![2];
-    initReportingProjections();
-    const reportMock = vi.mocked(registerProjection).mock.calls;
-    reportHandler = reportMock.find((c) => c[0] === "reporting")![2];
+    orderHandler = vi
+      .mocked(registerProjection)
+      .mock.calls.find((c) => c[0] === "orders")![2] as any;
   });
 
-  function givenAnOrder(
+  function sale(
     id: string,
-    terminalId: string,
-    items: Array<{
-      itemId: string;
-      name: string;
-      qty: number;
-      unitPrice: number;
-      vatRate: number;
-      vatAmount: number;
-      total: number;
-    }>,
-    totalGross: number,
-    totalVat: Record<number, number>,
-    totalNet: number,
+    at: string,
+    opts: {
+      terminalId?: string;
+      items?: Item[];
+      totalGross?: number;
+      totalVat?: Record<number, number>;
+      totalNet?: number;
+      cancelled?: boolean;
+    } = {},
   ) {
+    const occurredAt = new Date(at);
     orderHandler(
-      { type: "OrderOpened", data: { id, terminalId } },
+      {
+        type: "OrderOpened",
+        data: { id, terminalId: opts.terminalId ?? "t1" },
+        occurredAt,
+      },
       `order-${id}`,
     );
-    for (const item of items) {
+    for (const item of opts.items ?? []) {
       orderHandler(
-        { type: "ItemAdded", data: { orderId: id, ...item } },
-        `order-${id}`,
-      );
-      reportHandler(
-        { type: "ItemAdded", data: { orderId: id, ...item } },
+        { type: "ItemAdded", data: { orderId: id, ...item }, occurredAt },
         `order-${id}`,
       );
     }
     orderHandler(
       {
         type: "OrderClosed",
-        data: { orderId: id, totalGross, totalVat, totalNet },
+        data: {
+          orderId: id,
+          totalGross: opts.totalGross ?? 0,
+          totalVat: opts.totalVat ?? {},
+          totalNet: opts.totalNet ?? 0,
+          cancelled: opts.cancelled,
+        },
+        occurredAt,
       },
       `order-${id}`,
     );
   }
 
-  it("adds order to transactionHistory on OrderClosed", () => {
-    givenAnOrder("o1", "t1", [], 0, {}, 0);
-    reportHandler(
+  function cancel(id: string, cancelsOrderId: string, at: string) {
+    orderHandler(
       {
-        type: "OrderClosed",
-        data: { orderId: "o1", totalGross: 0, totalVat: {}, totalNet: 0 },
+        type: "OrderCancellationCreated",
+        data: {
+          id,
+          terminalId: "t1",
+          title: "Cancel",
+          cancelsOrderId,
+          items: [],
+          totalGross: -10,
+          totalVat: {},
+          totalNet: -10,
+          createdAt: at,
+          closedAt: at,
+        },
+        occurredAt: new Date(at),
       },
-      "order-o1",
+      `order-${id}`,
     );
+  }
 
-    const tx = transactionHistory.find((t) => t.orderId === "o1");
-    expect(tx).toBeTruthy();
-    expect(tx!.status).toBe("closed");
+  it("counts a sale closed at 23:30 Berlin time on that calendar day", () => {
+    sale("o1", "2026-06-01T21:30:00Z", { totalGross: 1 });
+
+    expect(getReport("2026-06-01", "2026-06-01").orderCount).toBe(1);
+    expect(getReport("2026-06-02", "2026-06-02").orderCount).toBe(0);
   });
 
-  it("accumulates daily totals on OrderClosed", () => {
-    givenAnOrder(
-      "o1",
-      "t1",
-      [
+  it("range spanning two days sums both", () => {
+    sale("o1", "2026-06-01T10:00:00Z", { totalGross: 10 });
+    sale("o2", "2026-06-02T10:00:00Z", { totalGross: 5 });
+
+    const report = getReport("2026-06-01", "2026-06-02");
+    expect(report.orderCount).toBe(2);
+    expect(report.totalGross).toBe(15);
+    expect(report.from).toBe("2026-06-01");
+    expect(report.to).toBe("2026-06-02");
+  });
+
+  it("cancellation counts at the original booking time", () => {
+    sale("o1", "2026-06-01T10:00:00Z", { totalGross: 10 });
+    cancel("c1", "o1", "2026-06-05T10:00:00Z");
+
+    const day1 = getReport("2026-06-01", "2026-06-01");
+    expect(day1.orderCount).toBe(0);
+    expect(day1.cancelledCount).toBe(1);
+    expect(day1.totalGross).toBe(0);
+    expect(getReport("2026-06-05", "2026-06-05").cancelledCount).toBe(0);
+
+    const list = listTransactions({ from: "2026-06-01", to: "2026-06-01" });
+    expect(list.map((t) => t.orderId).sort()).toEqual(["c1", "o1"]);
+    expect(list.every((t) => t.status === "cancelled")).toBe(true);
+    expect(list.find((t) => t.orderId === "c1")!.closedAt).toBe(
+      "2026-06-01T10:00:00.000Z",
+    );
+    expect(
+      listTransactions({ from: "2026-06-05", to: "2026-06-05" }),
+    ).toHaveLength(0);
+  });
+
+  it("discarded open order is not a sale", () => {
+    sale("o1", "2026-06-01T10:00:00Z", { totalGross: 3, cancelled: true });
+
+    expect(getReport("2026-06-01", "2026-06-01").orderCount).toBe(0);
+    expect(listTransactions({ from: "2026-06-01", to: "2026-06-01" })).toEqual(
+      [],
+    );
+  });
+
+  it("vat by rate and by terminal", () => {
+    sale("o1", "2026-06-01T10:00:00Z", {
+      terminalId: "t1",
+      items: [
         {
           itemId: "i1",
           name: "Espresso",
@@ -140,71 +202,13 @@ describe("Reporting Projections", () => {
           total: 5.0,
         },
       ],
-      5.0,
-      { 19: 0.8 },
-      4.2,
-    );
-
-    reportHandler(
-      {
-        type: "OrderClosed",
-        data: {
-          orderId: "o1",
-          totalGross: 5.0,
-          totalVat: { 19: 0.8 },
-          totalNet: 4.2,
-        },
-      },
-      "order-o1",
-    );
-
-    expect(dailyReport.orderCount).toBe(1);
-    expect(dailyReport.totalGross).toBeCloseTo(5.0);
-    expect(dailyReport.totalVat).toBeCloseTo(0.8);
-    expect(dailyReport.totalNet).toBeCloseTo(4.2);
-    expect(dailyReport.vatByGroup["19"].rate).toBe(19);
-    expect(dailyReport.vatByGroup["19"].gross).toBeCloseTo(5.0);
-    expect(dailyReport.vatByGroup["19"].vat).toBeCloseTo(0.8);
-    expect(dailyReport.byTerminal["t1"].orderCount).toBe(1);
-    expect(dailyReport.byTerminal["t1"].total).toBeCloseTo(5.0);
-  });
-
-  it("accumulates multiple orders", () => {
-    givenAnOrder(
-      "o1",
-      "t1",
-      [
-        {
-          itemId: "i1",
-          name: "Espresso",
-          qty: 1,
-          unitPrice: 2.5,
-          vatRate: 19,
-          vatAmount: 0.4,
-          total: 2.5,
-        },
-      ],
-      2.5,
-      { 19: 0.4 },
-      2.1,
-    );
-    reportHandler(
-      {
-        type: "OrderClosed",
-        data: {
-          orderId: "o1",
-          totalGross: 2.5,
-          totalVat: { 19: 0.4 },
-          totalNet: 2.1,
-        },
-      },
-      "order-o1",
-    );
-
-    givenAnOrder(
-      "o2",
-      "t2",
-      [
+      totalGross: 5.0,
+      totalVat: { 19: 0.8 },
+      totalNet: 4.2,
+    });
+    sale("o2", "2026-06-01T11:00:00Z", {
+      terminalId: "t2",
+      items: [
         {
           itemId: "i2",
           name: "Cake",
@@ -215,512 +219,94 @@ describe("Reporting Projections", () => {
           total: 3.0,
         },
       ],
-      3.0,
-      { 7: 0.2 },
-      2.8,
-    );
-    reportHandler(
-      {
-        type: "OrderClosed",
-        data: {
-          orderId: "o2",
-          totalGross: 3.0,
-          totalVat: { 7: 0.2 },
-          totalNet: 2.8,
-        },
-      },
-      "order-o2",
-    );
+      totalGross: 3.0,
+      totalVat: { 7: 0.2 },
+      totalNet: 2.8,
+    });
 
-    expect(dailyReport.orderCount).toBe(2);
-    expect(dailyReport.totalGross).toBeCloseTo(5.5);
-    expect(dailyReport.totalVat).toBeCloseTo(0.6);
-    expect(dailyReport.totalNet).toBeCloseTo(4.9);
-    expect(dailyReport.vatByGroup["19"].gross).toBeCloseTo(2.5);
-    expect(dailyReport.vatByGroup["7"].gross).toBeCloseTo(3.0);
-    expect(dailyReport.byTerminal["t1"].orderCount).toBe(1);
-    expect(dailyReport.byTerminal["t2"].orderCount).toBe(1);
+    const r = getReport("2026-06-01", "2026-06-01");
+    expect(r.orderCount).toBe(2);
+    expect(r.totalGross).toBeCloseTo(8.0);
+    expect(r.totalVat).toBeCloseTo(1.0);
+    expect(r.totalNet).toBeCloseTo(7.0);
+    expect(r.vatByGroup["19"].rate).toBe(19);
+    expect(r.vatByGroup["19"].gross).toBeCloseTo(5.0);
+    expect(r.vatByGroup["19"].vat).toBeCloseTo(0.8);
+    expect(r.vatByGroup["7"].gross).toBeCloseTo(3.0);
+    expect(r.byTerminal["t1"]).toEqual({ orderCount: 1, total: 5.0 });
+    expect(r.byTerminal["t2"]).toEqual({ orderCount: 1, total: 3.0 });
+    expect(r.topItems).toEqual([
+      { itemId: "i1", name: "Espresso", count: 2 },
+      { itemId: "i2", name: "Cake", count: 1 },
+    ]);
   });
 
-  it("sets status to cancelled for OrderClosed with cancelled flag", () => {
-    givenAnOrder("o1", "t1", [], 0, {}, 0);
-    reportHandler(
-      {
-        type: "OrderClosed",
-        data: {
-          orderId: "o1",
-          totalGross: 0,
-          totalVat: {},
-          totalNet: 0,
-          cancelled: true,
-        },
-      },
-      "order-o1",
-    );
+  it("filters and sorts transactions", () => {
+    sale("o1", "2026-06-01T10:00:00Z", {
+      terminalId: "t1",
+      items: [espresso(1)],
+      totalGross: 2.5,
+    });
+    sale("o2", "2026-06-02T10:00:00Z", { terminalId: "t2", totalGross: 1 });
 
-    const tx = transactionHistory.find((t) => t.orderId === "o1");
-    expect(tx!.status).toBe("cancelled");
-    expect(dailyReport.orderCount).toBe(0);
-    expect(dailyReport.totalGross).toBe(0);
+    const all = listTransactions({ from: "2026-06-01", to: "2026-06-02" });
+    expect(all.map((t) => t.orderId)).toEqual(["o2", "o1"]);
+    expect(
+      listTransactions({
+        from: "2026-06-01",
+        to: "2026-06-02",
+        terminal: "t1",
+      }).map((t) => t.orderId),
+    ).toEqual(["o1"]);
+    expect(
+      listTransactions({
+        from: "2026-06-01",
+        to: "2026-06-02",
+        search: "espresso",
+      }).map((t) => t.orderId),
+    ).toEqual(["o1"]);
+    expect(
+      listTransactions({
+        from: "2026-06-01",
+        to: "2026-06-02",
+        status: "cancelled",
+      }),
+    ).toEqual([]);
   });
 
-  it("does not accumulate totals for cancelled OrderClosed", () => {
-    givenAnOrder(
-      "o1",
-      "t1",
-      [
-        {
-          itemId: "i1",
-          name: "Espresso",
-          qty: 1,
-          unitPrice: 2.5,
-          vatRate: 19,
-          vatAmount: 0.4,
-          total: 2.5,
-        },
-      ],
-      2.5,
-      { 19: 0.4 },
-      2.1,
-    );
+  describe("routes", () => {
+    const app = express();
+    app.use("/api/reporting", reportingRoutes);
+    const pin = { "x-admin-pin": "0000" };
 
-    reportHandler(
-      {
-        type: "OrderClosed",
-        data: {
-          orderId: "o1",
-          totalGross: 2.5,
-          totalVat: { 19: 0.4 },
-          totalNet: 2.1,
-          cancelled: true,
-        },
-      },
-      "order-o1",
-    );
+    it("GET /api/reporting/summary without from returns 400", async () => {
+      const res = await request(app)
+        .get("/api/reporting/summary?to=2026-06-01")
+        .set(pin);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Zeitraum ungültig");
+    });
 
-    expect(dailyReport.orderCount).toBe(0);
-    expect(dailyReport.totalGross).toBe(0);
-    expect(dailyReport.totalVat).toBe(0);
-    expect(dailyReport.totalNet).toBe(0);
-    expect(dailyReport.vatByGroup["19"]).toBeUndefined();
-    expect(dailyReport.byTerminal["t1"]).toBeUndefined();
-  });
+    it("rejects impossible dates and reversed ranges", async () => {
+      for (const q of [
+        "from=2026-02-30&to=2026-03-01",
+        "from=2026-06-02&to=2026-06-01",
+        "from=abc&to=2026-06-01",
+      ]) {
+        const res = await request(app)
+          .get(`/api/reporting/transactions?${q}`)
+          .set(pin);
+        expect(res.status).toBe(400);
+      }
+    });
 
-  it("creates cancellation transaction entry", () => {
-    givenAnOrder("o1", "t1", [], 0, {}, 0);
-    reportHandler(
-      {
-        type: "OrderClosed",
-        data: { orderId: "o1", totalGross: 0, totalVat: {}, totalNet: 0 },
-      },
-      "order-o1",
-    );
-
-    orderHandler(
-      {
-        type: "OrderCancellationCreated",
-        data: {
-          id: "c1",
-          terminalId: "t1",
-          title: "Cancel",
-          cancelsOrderId: "o1",
-          items: [
-            {
-              itemId: "i1",
-              name: "Espresso",
-              qty: -1,
-              unitPrice: 2.5,
-              vatRate: 19,
-              vatAmount: -0.4,
-              total: -2.5,
-            },
-          ],
-          totalGross: -2.5,
-          totalVat: { 19: -0.4 },
-          totalNet: -2.1,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        },
-      },
-      "order-c1",
-    );
-    reportHandler(
-      {
-        type: "OrderCancellationCreated",
-        data: {
-          id: "c1",
-          terminalId: "t1",
-          title: "Cancel",
-          cancelsOrderId: "o1",
-          items: [
-            {
-              itemId: "i1",
-              name: "Espresso",
-              qty: -1,
-              unitPrice: 2.5,
-              vatRate: 19,
-              vatAmount: -0.4,
-              total: -2.5,
-            },
-          ],
-          totalGross: -2.5,
-          totalVat: { 19: -0.4 },
-          totalNet: -2.1,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        },
-      },
-      "order-c1",
-    );
-
-    const tx = transactionHistory.find((t) => t.orderId === "c1");
-    expect(tx).toBeTruthy();
-    expect(tx!.status).toBe("cancelled");
-    expect(tx!.cancelsOrderId).toBe("o1");
-  });
-
-  it("updates original transaction status to cancelled on OrderCancellationCreated", () => {
-    givenAnOrder(
-      "o1",
-      "t1",
-      [
-        {
-          itemId: "i1",
-          name: "Espresso",
-          qty: 1,
-          unitPrice: 2.5,
-          vatRate: 19,
-          vatAmount: 0.4,
-          total: 2.5,
-        },
-      ],
-      2.5,
-      { 19: 0.4 },
-      2.1,
-    );
-    reportHandler(
-      {
-        type: "OrderClosed",
-        data: {
-          orderId: "o1",
-          totalGross: 2.5,
-          totalVat: { 19: 0.4 },
-          totalNet: 2.1,
-        },
-      },
-      "order-o1",
-    );
-
-    expect(transactionHistory.find((t) => t.orderId === "o1")!.status).toBe(
-      "closed",
-    );
-
-    orderHandler(
-      {
-        type: "OrderCancellationCreated",
-        data: {
-          id: "c1",
-          terminalId: "t1",
-          title: "Cancel",
-          cancelsOrderId: "o1",
-          items: [
-            {
-              itemId: "i1",
-              name: "Espresso",
-              qty: -1,
-              unitPrice: 2.5,
-              vatRate: 19,
-              vatAmount: -0.4,
-              total: -2.5,
-            },
-          ],
-          totalGross: -2.5,
-          totalVat: { 19: -0.4 },
-          totalNet: -2.1,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        },
-      },
-      "order-c1",
-    );
-    reportHandler(
-      {
-        type: "OrderCancellationCreated",
-        data: {
-          id: "c1",
-          terminalId: "t1",
-          title: "Cancel",
-          cancelsOrderId: "o1",
-          items: [
-            {
-              itemId: "i1",
-              name: "Espresso",
-              qty: -1,
-              unitPrice: 2.5,
-              vatRate: 19,
-              vatAmount: -0.4,
-              total: -2.5,
-            },
-          ],
-          totalGross: -2.5,
-          totalVat: { 19: -0.4 },
-          totalNet: -2.1,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        },
-      },
-      "order-c1",
-    );
-
-    expect(transactionHistory.find((t) => t.orderId === "o1")!.status).toBe(
-      "cancelled",
-    );
-  });
-
-  it("reverses daily report totals on cancellation of closed order", () => {
-    givenAnOrder(
-      "o1",
-      "t1",
-      [
-        {
-          itemId: "i1",
-          name: "Espresso",
-          qty: 2,
-          unitPrice: 2.5,
-          vatRate: 19,
-          vatAmount: 0.8,
-          total: 5.0,
-        },
-      ],
-      5.0,
-      { 19: 0.8 },
-      4.2,
-    );
-    reportHandler(
-      {
-        type: "OrderClosed",
-        data: {
-          orderId: "o1",
-          totalGross: 5.0,
-          totalVat: { 19: 0.8 },
-          totalNet: 4.2,
-        },
-      },
-      "order-o1",
-    );
-
-    expect(dailyReport.orderCount).toBe(1);
-    expect(dailyReport.totalGross).toBeCloseTo(5.0);
-
-    orderHandler(
-      {
-        type: "OrderCancellationCreated",
-        data: {
-          id: "c1",
-          terminalId: "t1",
-          title: "Cancel",
-          cancelsOrderId: "o1",
-          items: [
-            {
-              itemId: "i1",
-              name: "Espresso",
-              qty: -2,
-              unitPrice: 2.5,
-              vatRate: 19,
-              vatAmount: -0.8,
-              total: -5.0,
-            },
-          ],
-          totalGross: -5.0,
-          totalVat: { 19: -0.8 },
-          totalNet: -4.2,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        },
-      },
-      "order-c1",
-    );
-    reportHandler(
-      {
-        type: "OrderCancellationCreated",
-        data: {
-          id: "c1",
-          terminalId: "t1",
-          title: "Cancel",
-          cancelsOrderId: "o1",
-          items: [
-            {
-              itemId: "i1",
-              name: "Espresso",
-              qty: -2,
-              unitPrice: 2.5,
-              vatRate: 19,
-              vatAmount: -0.8,
-              total: -5.0,
-            },
-          ],
-          totalGross: -5.0,
-          totalVat: { 19: -0.8 },
-          totalNet: -4.2,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        },
-      },
-      "order-c1",
-    );
-
-    expect(dailyReport.orderCount).toBe(0);
-    expect(dailyReport.totalGross).toBeCloseTo(0);
-    expect(dailyReport.totalVat).toBeCloseTo(0);
-    expect(dailyReport.totalNet).toBeCloseTo(0);
-    expect(dailyReport.cancelledCount).toBe(1);
-    expect(dailyReport.vatByGroup["19"].gross).toBeCloseTo(0);
-    expect(dailyReport.vatByGroup["19"].vat).toBeCloseTo(0);
-    expect(dailyReport.byTerminal["t1"].orderCount).toBe(0);
-    expect(dailyReport.byTerminal["t1"].total).toBeCloseTo(0);
-  });
-
-  it("reverses item counts on cancellation", () => {
-    givenAnOrder(
-      "o1",
-      "t1",
-      [
-        {
-          itemId: "i1",
-          name: "Espresso",
-          qty: 3,
-          unitPrice: 2.5,
-          vatRate: 19,
-          vatAmount: 1.2,
-          total: 7.5,
-        },
-      ],
-      7.5,
-      { 19: 1.2 },
-      6.3,
-    );
-    reportHandler(
-      {
-        type: "OrderClosed",
-        data: {
-          orderId: "o1",
-          totalGross: 7.5,
-          totalVat: { 19: 1.2 },
-          totalNet: 6.3,
-        },
-      },
-      "order-o1",
-    );
-
-    orderHandler(
-      {
-        type: "OrderCancellationCreated",
-        data: {
-          id: "c1",
-          terminalId: "t1",
-          title: "Cancel",
-          cancelsOrderId: "o1",
-          items: [
-            {
-              itemId: "i1",
-              name: "Espresso",
-              qty: -3,
-              unitPrice: 2.5,
-              vatRate: 19,
-              vatAmount: -1.2,
-              total: -7.5,
-            },
-          ],
-          totalGross: -7.5,
-          totalVat: { 19: -1.2 },
-          totalNet: -6.3,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        },
-      },
-      "order-c1",
-    );
-    reportHandler(
-      {
-        type: "OrderCancellationCreated",
-        data: {
-          id: "c1",
-          terminalId: "t1",
-          title: "Cancel",
-          cancelsOrderId: "o1",
-          items: [
-            {
-              itemId: "i1",
-              name: "Espresso",
-              qty: -3,
-              unitPrice: 2.5,
-              vatRate: 19,
-              vatAmount: -1.2,
-              total: -7.5,
-            },
-          ],
-          totalGross: -7.5,
-          totalVat: { 19: -1.2 },
-          totalNet: -6.3,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        },
-      },
-      "order-c1",
-    );
-
-    const report = getDailyReport();
-    expect(report.topItems).toHaveLength(0);
-  });
-
-  it("ItemAdded skips items for cancellation orders", () => {
-    orderHandler(
-      {
-        type: "OrderCancellationCreated",
-        data: {
-          id: "c1",
-          terminalId: "t1",
-          title: "Cancel",
-          cancelsOrderId: "o1",
-          items: [
-            {
-              itemId: "i1",
-              name: "Espresso",
-              qty: -1,
-              unitPrice: 2.5,
-              vatRate: 19,
-              vatAmount: -0.4,
-              total: -2.5,
-            },
-          ],
-          totalGross: -2.5,
-          totalVat: { 19: -0.4 },
-          totalNet: -2.1,
-          createdAt: new Date().toISOString(),
-          closedAt: new Date().toISOString(),
-        },
-      },
-      "order-c1",
-    );
-
-    reportHandler(
-      {
-        type: "ItemAdded",
-        data: {
-          orderId: "c1",
-          itemId: "i1",
-          name: "Espresso",
-          qty: -1,
-          unitPrice: 2.5,
-          vatRate: 19,
-          vatAmount: -0.4,
-          total: -2.5,
-        },
-      },
-      "order-c1",
-    );
-
-    const report = getDailyReport();
-    expect(report.topItems).toHaveLength(0);
+    it("returns the report for a valid range", async () => {
+      sale("o1", "2026-06-01T10:00:00Z", { totalGross: 10 });
+      const res = await request(app)
+        .get("/api/reporting/summary?from=2026-06-01&to=2026-06-01")
+        .set(pin);
+      expect(res.status).toBe(200);
+      expect(res.body.totalGross).toBe(10);
+    });
   });
 });
