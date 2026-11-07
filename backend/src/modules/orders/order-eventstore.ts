@@ -3,6 +3,10 @@ import { getPool } from "../../db.js";
 
 let tableInitialized = false;
 
+// Serializes all inserts so commit order equals id order; the subscriber's
+// `id > lastId` cursor would otherwise skip events of slower transactions.
+const EVENT_INSERT_LOCK = 727274;
+
 export type StoredEvent = {
   id: number;
   type: string;
@@ -40,12 +44,22 @@ export async function appendOrderEvent(
   await initOrderEventsTable();
   const client = await getPool().connect();
   try {
-    await client.query(
-      `INSERT INTO order_events (stream_id, event_type, data, created_at) VALUES ($1, $2, $3, COALESCE($4, NOW()))`,
-      [streamId, eventType, JSON.stringify(data), occurredAt ?? null],
-    );
-    await client.query(`NOTIFY "${streamId}", '1'`);
-    await client.query(`NOTIFY "order_events", '1'`);
+    await client.query("BEGIN");
+    try {
+      await client.query("SELECT pg_advisory_xact_lock($1)", [
+        EVENT_INSERT_LOCK,
+      ]);
+      await client.query(
+        `INSERT INTO order_events (stream_id, event_type, data, created_at) VALUES ($1, $2, $3, COALESCE($4, NOW()))`,
+        [streamId, eventType, JSON.stringify(data), occurredAt ?? null],
+      );
+      await client.query(`NOTIFY "${streamId}", '1'`);
+      await client.query(`NOTIFY "order_events", '1'`);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    }
   } finally {
     client.release();
   }
@@ -61,6 +75,7 @@ export async function insertOrderEvents(
   events: { type: string; data: Record<string, unknown>; occurredAt: Date }[],
 ): Promise<void> {
   await initOrderEventsTable();
+  await client.query("SELECT pg_advisory_xact_lock($1)", [EVENT_INSERT_LOCK]);
   for (const e of events) {
     await client.query(
       `INSERT INTO order_events (stream_id, event_type, data, created_at) VALUES ($1, $2, $3, $4)`,
@@ -120,7 +135,7 @@ export async function subscribeToOrderEvents(
     client.release();
   };
 
-  client.on("notification", () => {
+  const fetchNew = () => {
     chain = chain
       .then(async () => {
         const result = await getPool().query(
@@ -136,7 +151,11 @@ export async function subscribeToOrderEvents(
       .catch((err) => {
         console.error("[backend:eventstore] subscriber failed", err);
       });
-  });
+  };
+
+  client.on("notification", fetchNew);
+  // Catch up on events committed between replay and LISTEN.
+  fetchNew();
 
   return cleanup;
 }
