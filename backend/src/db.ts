@@ -68,6 +68,10 @@ export async function initTables(): Promise<void> {
         terminal_id TEXT NOT NULL,
         received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE synced_orders ADD COLUMN IF NOT EXISTS cancels_order_id TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_synced_orders_cancels
+        ON synced_orders(cancels_order_id) WHERE cancels_order_id IS NOT NULL;
     `);
     tablesInitialized = true;
     console.log(

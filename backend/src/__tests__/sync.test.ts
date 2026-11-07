@@ -16,13 +16,15 @@ vi.mock("../db", () => ({
 }));
 
 import syncRoutes from "../api/routes/sync.routes.js";
+import { initTables } from "../db.js";
 import { orders } from "../modules/orders/orders.projections.js";
 import { Order } from "../modules/orders/orders.types.js";
 import { BookingUpload } from "../modules/sync/sync.types.js";
 
+// Same mount order as index.ts: the sync router parses its own large bodies.
 const app = express();
-app.use(express.json());
 app.use("/api/sync", syncRoutes);
+app.use(express.json());
 
 const terminalRow = {
   id: "t1",
@@ -146,6 +148,8 @@ beforeEach(() => {
   connect.mockReset();
   connect.mockResolvedValue({ query: clientQuery, release });
   orders.clear();
+  vi.mocked(initTables).mockReset();
+  vi.mocked(initTables).mockResolvedValue(undefined);
 });
 
 describe("GET /api/sync/catalog", () => {
@@ -314,6 +318,121 @@ describe("POST /api/sync/bookings", () => {
       orders: Array.from({ length: 201 }, (_, i) => sale(`o${i}`)),
     });
     expect(tooMany.status).toBe(400);
+  });
+
+  it("rejects a sale with a further OrderOpened after the first event", async () => {
+    const booking = sale("o1");
+    booking.events.splice(1, 0, {
+      type: "OrderOpened",
+      data: { id: "victim", terminalId: "t1", orderId: "o1" },
+      occurredAt: "2026-07-01T18:00:01.000Z",
+    });
+    const res = await upload({ orders: [booking] });
+    expect(res.body.accepted).toEqual([]);
+    expect(res.body.rejected[0].orderId).toBe("o1");
+    expect(eventInserts()).toHaveLength(0);
+  });
+
+  it("rejects a sale with a later event for a different order", async () => {
+    const booking = sale("o1");
+    booking.events[1].data.orderId = "other";
+    const res = await upload({ orders: [booking] });
+    expect(res.body.accepted).toEqual([]);
+    expect(res.body.rejected[0].orderId).toBe("o1");
+  });
+
+  it("rejects an order id that already belongs to another terminal", async () => {
+    orders.set("o1", { id: "o1", terminalId: "t2" } as Order);
+    const res = await upload({ orders: [sale("o1"), sale("o2")] });
+    expect(res.body.accepted).toEqual(["o2"]);
+    expect(res.body.rejected[0].orderId).toBe("o1");
+    const streams = eventInserts().map(([, params]) => params[0]);
+    expect(streams).not.toContain("order-o1");
+  });
+
+  it("rejects malformed event payloads", async () => {
+    const badQty = sale("o1");
+    badQty.events[1].data.qty = "1";
+    const noName = sale("o2");
+    delete noName.events[1].data.name;
+    const noVat = sale("o3");
+    delete noVat.events[2].data.totalVat;
+    const badGross = sale("o4");
+    badGross.events[2].data.totalGross = null;
+    const noItems = cancellation("c1", "o9");
+    noItems.events[0].data.items = "none";
+    const badItem = cancellation("c2", "o9");
+    badItem.events[0].data.items = [
+      { itemId: "i1", name: "Bier", qty: -1, unitPrice: 4.5, vatRate: 19, vatAmount: -0.72, total: "x" },
+    ];
+    const badDate = cancellation("c3", "o9");
+    badDate.events[0].data.closedAt = "gestern";
+    const noNet = cancellation("c4", "o9");
+    delete noNet.events[0].data.totalNet;
+    orders.set("o9", { id: "o9", terminalId: "t1" } as Order);
+
+    const res = await upload({
+      orders: [badQty, noName, noVat, badGross, noItems, badItem, badDate, noNet],
+    });
+    expect(res.body.accepted).toEqual([]);
+    expect(
+      res.body.rejected.map((r: { orderId: string }) => r.orderId),
+    ).toEqual(["o1", "o2", "o3", "o4", "c1", "c2", "c3", "c4"]);
+    for (const r of res.body.rejected) expect(r.error).toBeTruthy();
+    expect(eventInserts()).toHaveLength(0);
+  });
+
+  it("stores the cancelled order id and rejects a cancellation stored earlier for the same sale", async () => {
+    orders.set("o1", { id: "o1", terminalId: "t1" } as Order);
+    clientQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
+      if (String(sql).includes("INSERT INTO synced_orders")) {
+        expect(params?.[2]).toBe("o1");
+        throw Object.assign(new Error("duplicate key"), {
+          code: "23505",
+          constraint: "idx_synced_orders_cancels",
+        });
+      }
+      return { rows: [] };
+    });
+    const res = await upload({ orders: [cancellation("c2", "o1")] });
+    expect(res.body.rejected).toEqual([
+      { orderId: "c2", error: "Buchung wurde bereits storniert" },
+    ]);
+    const sqls = clientQuery.mock.calls.map(([sql]) => String(sql));
+    expect(sqls).toContain("ROLLBACK");
+  });
+
+  it("stores no cancelled order id for a sale", async () => {
+    await upload({ orders: [sale("o1")] });
+    const insert = clientQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("INSERT INTO synced_orders"),
+    );
+    expect(insert?.[1]).toEqual(["o1", "t1", null]);
+  });
+
+  it("rejects only the booking whose connection fails and keeps going", async () => {
+    connect.mockRejectedValueOnce(new Error("pool exhausted"));
+    const res = await upload({ orders: [sale("o1"), sale("o2")] });
+    expect(res.status).toBe(200);
+    expect(res.body.rejected).toEqual([
+      { orderId: "o1", error: "Speichern fehlgeschlagen" },
+    ]);
+    expect(res.body.accepted).toEqual(["o2"]);
+  });
+
+  it("answers 500 with a German message when the database is unavailable", async () => {
+    vi.mocked(initTables).mockRejectedValue(new Error("db down"));
+    const res = await upload({ orders: [sale("o1")] });
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Serverfehler" });
+  });
+
+  it("accepts an upload larger than the default JSON limit", async () => {
+    const booking = sale("o1");
+    booking.events[1].data.name = "x".repeat(300_000);
+    const res = await upload({ orders: [booking] });
+    expect(res.status).toBe(200);
+    expect(res.body.accepted).toEqual(["o1"]);
   });
 
   it("POST /api/sync/bookings without key returns 401", async () => {

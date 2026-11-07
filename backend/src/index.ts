@@ -23,7 +23,10 @@ startupLog(
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+// Mounted before the global JSON parser: the sync router parses its own,
+// larger bodies (a whole festival of bookings) after the terminal key check.
+app.use("/api/sync", syncRoutes);
+app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -35,7 +38,6 @@ app.use("/api/orders", ordersRoutes);
 app.use("/api/terminals", terminalsRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api/company", companyRoutes);
-app.use("/api/sync", syncRoutes);
 
 startupLog("Registering projections…");
 const projStart = Date.now();

@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { getPool, initTables } from "../../db.js";
 import { listGroups, listItems } from "../catalog/catalog.repository.js";
 import { getCompanySettings } from "../company/company.repository.js";
@@ -37,22 +38,43 @@ export async function getCatalogSnapshot(
   };
 }
 
+const CANCELS_INDEX = "idx_synced_orders_cancels";
+
+function isCancelsConflict(err: unknown): boolean {
+  const e = err as { code?: string; constraint?: string };
+  return e?.code === "23505" && e.constraint === CANCELS_INDEX;
+}
+
 /**
- * Stores one booking in its own transaction. Returns false when anything
- * failed; the transaction is then rolled back so nothing is half-stored.
+ * Stores one booking in its own transaction and returns a German error text,
+ * or null on success. On failure the transaction is rolled back so nothing is
+ * half-stored.
  */
 async function storeBooking(
   terminalId: string,
   u: BookingUpload,
-): Promise<boolean> {
-  const client = await getPool().connect();
+): Promise<string | null> {
+  let client: PoolClient;
+  try {
+    client = await getPool().connect();
+  } catch (err) {
+    console.error(`[backend:sync] no connection for ${u.orderId}`, err);
+    return "Speichern fehlgeschlagen";
+  }
+  const first = u.events[0];
+  const cancelsOrderId =
+    first.type === "OrderCancellationCreated"
+      ? (first.data.cancelsOrderId as string)
+      : null;
   let broken: Error | undefined;
   try {
     await client.query("BEGIN");
+    // A re-upload hits ON CONFLICT (order_id); a different cancellation of an
+    // already cancelled sale violates the unique index on cancels_order_id.
     const inserted = await client.query(
-      `INSERT INTO synced_orders (order_id, terminal_id) VALUES ($1, $2)
+      `INSERT INTO synced_orders (order_id, terminal_id, cancels_order_id) VALUES ($1, $2, $3)
        ON CONFLICT (order_id) DO NOTHING RETURNING order_id`,
-      [u.orderId, terminalId],
+      [u.orderId, terminalId, cancelsOrderId],
     );
     // No row: the booking was stored by an earlier upload.
     if (inserted.rows.length > 0) {
@@ -67,13 +89,14 @@ async function storeBooking(
       );
     }
     await client.query("COMMIT");
-    return true;
+    return null;
   } catch (err) {
-    console.error(`[backend:sync] storing ${u.orderId} failed`, err);
     await client.query("ROLLBACK").catch((rollbackErr: Error) => {
       broken = rollbackErr;
     });
-    return false;
+    if (isCancelsConflict(err)) return "Buchung wurde bereits storniert";
+    console.error(`[backend:sync] storing ${u.orderId} failed`, err);
+    return "Speichern fehlgeschlagen";
   } finally {
     // Passing an error makes the pool discard a connection in unknown state.
     client.release(broken);
@@ -118,8 +141,15 @@ export async function ingestUploads(
       rejected.push({ orderId, error });
       continue;
     }
-    if (!(await storeBooking(terminalId, u))) {
-      rejected.push({ orderId, error: "Speichern fehlgeschlagen" });
+    // Same stream id as another terminal's order would merge both streams.
+    const existing = orders.get(orderId);
+    if (existing && existing.terminalId !== terminalId) {
+      rejected.push({ orderId, error: "Buchungs-ID bereits vergeben" });
+      continue;
+    }
+    const storeError = await storeBooking(terminalId, u);
+    if (storeError) {
+      rejected.push({ orderId, error: storeError });
       continue;
     }
     accepted.push(orderId);
