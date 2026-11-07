@@ -1,0 +1,370 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import App from "../App";
+import { catalog, installFakeBridge, saleEvents, settings, T0 } from "./fake-bridge";
+import type { NewEvent } from "../../shared/types";
+
+vi.mock("../print/usb", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../print/usb")>();
+  return { ...actual, printJobs: vi.fn() };
+});
+vi.mock("../print/layout", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../print/layout")>();
+  return { ...actual, layoutJobs: vi.fn(actual.layoutJobs) };
+});
+vi.mock("../sync/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../sync/client")>();
+  return { ...actual, listTerminals: vi.fn(), fetchCatalog: vi.fn(), uploadAll: vi.fn() };
+});
+
+import { PrintError, printJobs } from "../print/usb";
+import { layoutJobs } from "../print/layout";
+import { fetchCatalog, listTerminals, SyncError, uploadAll } from "../sync/client";
+
+const SALE_A = "aaaaaaaa-0000-4000-8000-000000000001";
+const SALE_B = "bbbbbbbb-0000-4000-8000-000000000002";
+const OPEN = "cccccccc-0000-4000-8000-000000000003";
+
+/** An open order with 2 x Bier (7,50 €). */
+const openOrderEvents: NewEvent[] = [
+  { orderId: OPEN, type: "OrderOpened", data: { id: OPEN, terminalId: "t1" }, occurredAt: T0 },
+  {
+    orderId: OPEN, type: "ItemAdded", occurredAt: T0,
+    data: { orderId: OPEN, itemId: "i1", name: "Bier", qty: 2, unitPrice: 3.75, vatRate: 19, vatAmount: 1.2, total: 7.5 },
+  },
+];
+
+let fake: ReturnType<typeof installFakeBridge>;
+
+function setup(init: Parameters<typeof installFakeBridge>[0]) {
+  fake = installFakeBridge(init);
+  return render(<App />);
+}
+
+const orderPanel = () => screen.getByRole("region", { name: "Bestellung" });
+const appendedTypes = () => fake.bridge.appendEvents.mock.calls.flatMap(([evs]) => evs.map((e) => e.type));
+const click = (name: string | RegExp) => fireEvent.click(screen.getByRole("button", { name }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(printJobs).mockImplementation(async () => { fake.log.push("printJobs"); });
+});
+
+describe("App", () => {
+  it("first start shows setup wizard", async () => {
+    setup({});
+    expect(await screen.findByLabelText("Serveradresse")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Terminals laden" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Bezahlen & Drucken" })).not.toBeInTheDocument();
+  });
+
+  it("setup validates the address, then saves catalog before settings", async () => {
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }, { id: "t2", name: "Grill" }]);
+    vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 1000 });
+    setup({});
+    await screen.findByLabelText("Serveradresse");
+    click("Terminals laden");
+    expect(await screen.findByText("Bitte Serveradresse eingeben")).toBeInTheDocument();
+    expect(listTerminals).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Serveradresse"), { target: { value: " kasse.example/ " } });
+    click("Terminals laden");
+    fireEvent.click(await screen.findByRole("button", { name: "Grill" }));
+    fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "geheim" } });
+    click("Einrichten & Artikel abholen");
+
+    expect(await screen.findByRole("button", { name: /Bier/ })).toBeInTheDocument();
+    expect(listTerminals).toHaveBeenCalledWith("https://kasse.example");
+    expect(fetchCatalog).toHaveBeenCalledWith({
+      serverUrl: "https://kasse.example", terminalId: "t2", terminalKey: "geheim",
+      changeCalculator: false, printer: null, paperWidth: "80", lastCatalogFetchAt: null, clockSkewMs: null,
+    });
+    expect(fake.log).toEqual(["saveCatalog", "saveSettings"]);
+    expect(fake.state.settings).toMatchObject({ serverUrl: "https://kasse.example", terminalId: "t2", clockSkewMs: 1000 });
+    expect(fake.state.settings?.lastCatalogFetchAt).toEqual(expect.any(String));
+  });
+
+  it("setup failure saves nothing and shows the SyncError message", async () => {
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }]);
+    vi.mocked(fetchCatalog).mockRejectedValue(new SyncError("Terminal-Schlüssel ungültig – bitte Terminal neu einrichten"));
+    setup({});
+    fireEvent.change(await screen.findByLabelText("Serveradresse"), { target: { value: "kasse.example" } });
+    click("Terminals laden");
+    fireEvent.click(await screen.findByRole("button", { name: "Theke 1" }));
+    fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "falsch" } });
+    click("Einrichten & Artikel abholen");
+    expect(await screen.findByText("Terminal-Schlüssel ungültig – bitte Terminal neu einrichten")).toBeInTheDocument();
+    expect(fake.bridge.saveCatalog).not.toHaveBeenCalled();
+    expect(fake.bridge.saveSettings).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Serveradresse")).toBeInTheDocument();
+  });
+
+  it("tap item twice then Bezahlen & Drucken persists events before printing", async () => {
+    setup({ settings, catalog });
+    expect(await screen.findByText("Keine offene Bestellung. Artikel antippen zum Starten.")).toBeInTheDocument();
+    expect(screen.getByText("Theke 1")).toBeInTheDocument();
+    expect(screen.getByText(`Artikelstand: ${new Date(T0).toLocaleString("de-DE")}`)).toBeInTheDocument();
+    expect(screen.getByText("0 Buchung(en) nicht übertragen")).toBeInTheDocument();
+
+    click(/Bier/);
+    await waitFor(() => expect(within(orderPanel()).getByText("Bier")).toBeInTheDocument());
+    click(/Bier/);
+    await waitFor(() => expect(within(orderPanel()).getByText("2")).toBeInTheDocument());
+    expect(within(orderPanel()).getAllByText(/7,50\s€/).length).toBeGreaterThan(0);
+
+    click("Bezahlen & Drucken");
+    expect(await screen.findByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(1));
+    expect(fake.log).toEqual([
+      "appendEvents:OrderOpened,ItemAdded",
+      "appendEvents:ItemAdded",
+      "appendEvents:FinalReceiptPrinted,PickupReceiptPrinted,OrderClosed",
+      "printJobs",
+    ]);
+    const [printer, jobs] = vi.mocked(printJobs).mock.calls[0];
+    expect(printer).toEqual(settings.printer);
+    expect(jobs).toHaveLength(2); // final receipt + one pickup receipt
+    expect(vi.mocked(layoutJobs).mock.calls[0][1]).toMatchObject({ width: 42, copy: false, terminalName: "Theke 1", company: catalog.company });
+    expect(screen.getByText("Keine offene Bestellung. Artikel antippen zum Starten.")).toBeInTheDocument();
+  });
+
+  it("print failure keeps booking and shows German error; reprint calls printJobs with copy", async () => {
+    vi.mocked(printJobs).mockRejectedValueOnce(new PrintError("Drucker nicht gefunden – ist er eingeschaltet und angeschlossen?"));
+    setup({ settings: { ...settings, paperWidth: "58" }, catalog, events: openOrderEvents });
+    fireEvent.click(await screen.findByRole("button", { name: "Bezahlen & Drucken" }));
+    expect(await screen.findByText(
+      "Drucker nicht gefunden – ist er eingeschaltet und angeschlossen? – Buchung ist gespeichert. „Letzten Bon nachdrucken“ verwenden.",
+    )).toBeInTheDocument();
+    expect(screen.getByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    expect(appendedTypes()).toContain("OrderClosed");
+
+    click("Letzten Bon nachdrucken");
+    await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(2));
+    const [order, ctx, printPickups] = vi.mocked(layoutJobs).mock.calls[1];
+    expect(order.id).toBe(OPEN);
+    expect(ctx).toMatchObject({ copy: true, width: 32 });
+    expect(printPickups).toBe(true);
+    expect(vi.mocked(printJobs).mock.calls[1][1]).toHaveLength(2);
+    expect(fake.bridge.appendEvents).toHaveBeenCalledTimes(1); // reprint persists nothing
+    await waitFor(() => expect(screen.queryByText(/Buchung ist gespeichert/)).not.toBeInTheDocument());
+  });
+
+  it("double click on Bezahlen & Drucken closes only one order", async () => {
+    setup({ settings, catalog, events: openOrderEvents });
+    const pay = await screen.findByRole("button", { name: "Bezahlen & Drucken" });
+    await act(async () => {
+      pay.click();
+      pay.click();
+    });
+    await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(1));
+    await screen.findByText("1 Buchung(en) nicht übertragen");
+    expect(appendedTypes().filter((t) => t === "OrderClosed")).toHaveLength(1);
+    expect(printJobs).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetch catalog failure keeps old items visible and shows Server nicht erreichbar", async () => {
+    vi.mocked(fetchCatalog).mockRejectedValue(new SyncError("Server nicht erreichbar"));
+    setup({ settings, catalog });
+    await screen.findByRole("button", { name: /Bier/ });
+    click("Artikel abholen");
+    expect(await screen.findByText("Server nicht erreichbar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Bier/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Bratwurst/ })).toBeInTheDocument();
+    expect(fake.bridge.saveCatalog).not.toHaveBeenCalled();
+    expect(fake.bridge.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("fetch catalog success saves catalog, fetch time and clock skew", async () => {
+    const next = { ...catalog, items: [...catalog.items, { id: "i3", name: "Cola", groupId: "g1", price: 2.5 }] };
+    vi.mocked(fetchCatalog).mockResolvedValue({ catalog: next, clockSkewMs: 6 * 60_000 });
+    setup({ settings, catalog });
+    await screen.findByRole("button", { name: /Bier/ });
+    click("Artikel abholen");
+    expect(await screen.findByText("Artikel aktualisiert")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Cola/ })).toBeInTheDocument();
+    expect(fake.log).toEqual(["saveCatalog", "saveSettings"]);
+    expect(fake.state.settings?.clockSkewMs).toBe(6 * 60_000);
+    expect(fake.state.settings?.lastCatalogFetchAt).not.toBe(T0);
+    expect(screen.getByText("Die Uhr dieses Rechners weicht um 6 Minuten von der Serverzeit ab. Bitte Uhrzeit prüfen.")).toBeInTheDocument();
+  });
+
+  it("cancel requires confirmation and then persists OrderCancellationCreated", async () => {
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    fireEvent.click(await screen.findByRole("button", { name: "Storno" }));
+    fireEvent.click(await screen.findByRole("button", { name: /#aaaaaaaa/ }));
+    expect(screen.getByText("Buchung #aaaaaaaa über 7,50 € wirklich stornieren?")).toBeInTheDocument();
+    click("Abbrechen");
+    expect(fake.bridge.appendEvents).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /#aaaaaaaa/ }));
+    click("Ja, stornieren");
+    await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(1));
+    const [[events]] = fake.bridge.appendEvents.mock.calls;
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("OrderCancellationCreated");
+    expect(events[0].data).toMatchObject({ cancelsOrderId: SALE_A, totalGross: -7.5 });
+    expect(fake.log).toEqual(["appendEvents:OrderCancellationCreated", "printJobs"]);
+    expect(await screen.findByText("2 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    const [stornoOrder] = vi.mocked(layoutJobs).mock.calls[0];
+    expect(stornoOrder.cancelsOrderId).toBe(SALE_A);
+  });
+
+  it("change calculator shows Rückgeld 2,50 € for Gegeben 10 on 7,50 €", async () => {
+    setup({ settings: { ...settings, changeCalculator: true }, catalog, events: openOrderEvents });
+    fireEvent.click(await screen.findByRole("button", { name: "Bezahlen & Drucken" }));
+    const dialog = screen.getByRole("dialog", { name: "Bezahlen" });
+    expect(within(dialog).getByText("Summe").parentElement).toHaveTextContent(/7,50\s€/);
+    const rueckgeld = () => within(dialog).getByText("Rückgeld").parentElement;
+
+    fireEvent.change(within(dialog).getByLabelText("Gegeben"), { target: { value: "5" } });
+    expect(rueckgeld()).toHaveTextContent("Betrag reicht nicht");
+    fireEvent.change(within(dialog).getByLabelText("Gegeben"), { target: { value: "10,5" } });
+    expect(rueckgeld()).toHaveTextContent(/3,00\s€/);
+    fireEvent.change(within(dialog).getByLabelText("Gegeben"), { target: { value: "10" } });
+    expect(rueckgeld()).toHaveTextContent(/2,50\s€/);
+    expect(fake.bridge.appendEvents).not.toHaveBeenCalled();
+
+    click("Abschließen & Drucken");
+    await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(1));
+    expect(appendedTypes()).toContain("OrderClosed");
+    expect(screen.queryByRole("dialog", { name: "Bezahlen" })).not.toBeInTheDocument();
+  });
+
+  it("change calculator Abbrechen keeps the order open", async () => {
+    setup({ settings: { ...settings, changeCalculator: true }, catalog, events: openOrderEvents });
+    fireEvent.click(await screen.findByRole("button", { name: "Bezahlen & Drucken" }));
+    click("Abbrechen");
+    expect(screen.queryByRole("dialog", { name: "Bezahlen" })).not.toBeInTheDocument();
+    expect(fake.bridge.appendEvents).not.toHaveBeenCalled();
+    expect(within(orderPanel()).getByText("Bier")).toBeInTheDocument();
+  });
+
+  it("open order is restored after remount", async () => {
+    const first = setup({ settings, catalog, events: openOrderEvents });
+    await waitFor(() => expect(within(orderPanel()).getByText("Bier")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Bratwurst/ }));
+    await waitFor(() => expect(within(orderPanel()).getByText("Bratwurst")).toBeInTheDocument());
+    first.unmount();
+
+    render(<App />); // same bridge, i.e. what is on disk
+    await waitFor(() => expect(within(orderPanel()).getByText("Bratwurst")).toBeInTheDocument());
+    expect(within(orderPanel()).getByText("Bier")).toBeInTheDocument();
+    expect(within(orderPanel()).getByText("#cccccccc", { exact: false })).toBeInTheDocument();
+    expect(within(orderPanel()).getAllByText(/12,00\s€/).length).toBeGreaterThan(0);
+  });
+
+  it("upload marks accepted orders synced and counter drops to 0", async () => {
+    vi.mocked(uploadAll).mockImplementation(async (_s, uploads) => ({
+      accepted: uploads.map((u) => u.orderId), rejected: [], clockSkewMs: null,
+    }));
+    setup({ settings, catalog, events: [...saleEvents(SALE_A), ...openOrderEvents] });
+    expect(await screen.findByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    click("Buchungen übertragen");
+    expect(await screen.findByText("1 Buchung(en) übertragen")).toBeInTheDocument();
+    expect(screen.getByText("0 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    const [s, uploads] = vi.mocked(uploadAll).mock.calls[0];
+    expect(s).toEqual(settings);
+    expect(uploads.map((u) => u.orderId)).toEqual([SALE_A]); // the open order stays local
+    expect(uploads[0].events.map((e) => e.type)).toEqual(["OrderOpened", "ItemAdded", "FinalReceiptPrinted", "OrderClosed"]);
+    expect(fake.bridge.markSynced).toHaveBeenCalledWith([SALE_A]);
+    expect(fake.bridge.saveSettings).not.toHaveBeenCalled(); // null skew keeps the stored value
+  });
+
+  it("upload reports rejected bookings with the first error", async () => {
+    vi.mocked(uploadAll).mockResolvedValue({
+      accepted: [SALE_A], rejected: [{ orderId: SALE_B, error: "Ungültige Buchung" }], clockSkewMs: 0,
+    });
+    setup({ settings: { ...settings, clockSkewMs: 7 * 60_000 }, catalog, events: [...saleEvents(SALE_A), ...saleEvents(SALE_B)] });
+    expect(await screen.findByText("Die Uhr dieses Rechners weicht um 7 Minuten von der Serverzeit ab. Bitte Uhrzeit prüfen.")).toBeInTheDocument();
+    click("Buchungen übertragen");
+    expect(await screen.findByText("1 Buchung(en) übertragen, 1 abgelehnt: Ungültige Buchung")).toBeInTheDocument();
+    expect(screen.getByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    expect(fake.state.settings?.clockSkewMs).toBe(0);
+    expect(screen.queryByText(/Die Uhr dieses Rechners/)).not.toBeInTheDocument();
+  });
+
+  it("upload failure still marks the batches the server already accepted", async () => {
+    vi.mocked(uploadAll).mockRejectedValue(new SyncError("Server nicht erreichbar", { accepted: [SALE_A], rejected: [] }));
+    setup({ settings, catalog, events: [...saleEvents(SALE_A), ...saleEvents(SALE_B)] });
+    expect(await screen.findByText("2 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    click("Buchungen übertragen");
+    expect(await screen.findByText("Server nicht erreichbar – 1 Buchung(en) übertragen")).toBeInTheDocument();
+    expect(fake.bridge.markSynced).toHaveBeenCalledWith([SALE_A]);
+    expect(screen.getByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+  });
+
+  it("selling continues while an upload is still waiting for the server", async () => {
+    let finish: (r: Awaited<ReturnType<typeof uploadAll>>) => void = () => {};
+    vi.mocked(uploadAll).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    await screen.findByText("1 Buchung(en) nicht übertragen");
+    click("Buchungen übertragen");
+    await waitFor(() => expect(uploadAll).toHaveBeenCalled());
+
+    click(/Bier/);
+    await waitFor(() => expect(within(orderPanel()).getByText("Bier")).toBeInTheDocument());
+    click("Bezahlen & Drucken");
+    await screen.findByText("2 Buchung(en) nicht übertragen");
+    expect(screen.getByRole("button", { name: "Buchungen übertragen" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Storno" })).toBeDisabled();
+
+    await act(async () => { finish({ accepted: [SALE_A], rejected: [], clockSkewMs: null }); });
+    expect(await screen.findByText("1 Buchung(en) übertragen")).toBeInTheDocument();
+    expect(screen.getByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    expect(fake.bridge.markSynced).toHaveBeenCalledWith([SALE_A]);
+  });
+
+  it("failed save re-reads the store and asks to try again", async () => {
+    setup({ settings, catalog });
+    fake.bridge.appendEvents.mockRejectedValueOnce(new Error("EIO"));
+    fireEvent.click(await screen.findByRole("button", { name: /Bier/ }));
+    expect(await screen.findByText("Speichern fehlgeschlagen – bitte erneut versuchen")).toBeInTheDocument();
+    expect(fake.bridge.readEvents).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Keine offene Bestellung. Artikel antippen zum Starten.")).toBeInTheDocument();
+  });
+
+  it("checkout whose events reached the disk despite an error still prints and shows no save error", async () => {
+    setup({ settings, catalog, events: openOrderEvents });
+    const pay = await screen.findByRole("button", { name: "Bezahlen & Drucken" });
+    const persist = fake.bridge.appendEvents.getMockImplementation()!;
+    fake.bridge.appendEvents.mockImplementationOnce(async (evs) => { await persist(evs); throw new Error("IPC"); });
+    fireEvent.click(pay);
+    await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    expect(screen.queryByText("Speichern fehlgeschlagen – bitte erneut versuchen")).not.toBeInTheDocument();
+  });
+
+  it("Verwerfen asks for confirmation", async () => {
+    setup({ settings, catalog, events: openOrderEvents });
+    fireEvent.click(await screen.findByRole("button", { name: "Verwerfen" }));
+    expect(screen.getByText("Bestellung verwerfen?")).toBeInTheDocument();
+    click("Abbrechen");
+    expect(fake.bridge.appendEvents).not.toHaveBeenCalled();
+    click("Verwerfen");
+    click("Ja, verwerfen");
+    expect(await screen.findByText("Keine offene Bestellung. Artikel antippen zum Starten.")).toBeInTheDocument();
+    const [[events]] = fake.bridge.appendEvents.mock.calls;
+    expect(events).toMatchObject([{ type: "OrderClosed", data: { cancelled: true } }]);
+    expect(printJobs).not.toHaveBeenCalled();
+  });
+
+  it("settings toggle the change calculator and block re-setup while bookings are pending", async () => {
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    expect(screen.getByRole("button", { name: "Terminal neu einrichten" })).toBeDisabled();
+    expect(screen.getByText("Erst alle Buchungen übertragen")).toBeInTheDocument();
+    expect(screen.getByLabelText("Druckereinstellungen")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Rückgeldrechner anzeigen"));
+    await waitFor(() => expect(fake.bridge.saveSettings).toHaveBeenCalledWith({ ...settings, changeCalculator: true }));
+    await waitFor(() => expect(screen.getByLabelText("Rückgeldrechner anzeigen")).toBeChecked());
+  });
+
+  it("re-setup opens the wizard and keeps the till's catalog when cancelled", async () => {
+    setup({ settings, catalog });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    click("Terminal neu einrichten");
+    expect(screen.getByLabelText("Serveradresse")).toHaveValue("https://kasse.example");
+    click("Abbrechen");
+    expect(screen.getByRole("button", { name: /Bier/ })).toBeInTheDocument();
+  });
+});
