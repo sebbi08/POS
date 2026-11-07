@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { TerminalBridge } from "../shared/types";
+import type { TerminalBridge, UsbDeviceChoice } from "../shared/types";
 
 const bridge: TerminalBridge = {
   appendEvents: (events) => ipcRenderer.invoke("store:appendEvents", events),
@@ -11,6 +11,12 @@ const bridge: TerminalBridge = {
   saveSettings: (s) => ipcRenderer.invoke("store:saveSettings", s),
   loadSettings: () => ipcRenderer.invoke("store:loadSettings"),
   appVersion: () => ipcRenderer.invoke("app:version"),
+  onUsbChoose: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, devices: UsbDeviceChoice[]) => cb(devices);
+    ipcRenderer.on("usb:choose", listener);
+    return () => { ipcRenderer.removeListener("usb:choose", listener); };
+  },
+  chooseUsb: (deviceId) => ipcRenderer.invoke("usb:chosen", deviceId),
 };
 
 contextBridge.exposeInMainWorld("terminal", bridge);

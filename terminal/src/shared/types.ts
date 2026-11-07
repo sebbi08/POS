@@ -10,6 +10,7 @@ export interface TerminalSettings {
   changeCalculator: boolean; printer: SavedPrinter | null; paperWidth: "58" | "80";
   lastCatalogFetchAt: string | null; clockSkewMs: number | null;
 }
+export interface UsbDeviceChoice { deviceId: string; productName?: string; vendorId: number; productId: number }
 export interface TerminalBridge {   // window.terminal
   appendEvents(events: NewEvent[]): Promise<LocalEvent[]>;
   readEvents(): Promise<LocalEvent[]>;
@@ -20,4 +21,8 @@ export interface TerminalBridge {   // window.terminal
   saveSettings(s: TerminalSettings): Promise<void>;
   loadSettings(): Promise<TerminalSettings | null>;
   appVersion(): Promise<string>;
+  /** Main asks which USB device to pair (printer search); returns an unsubscribe. */
+  onUsbChoose(cb: (devices: UsbDeviceChoice[]) => void): () => void;
+  /** Answer to onUsbChoose; null cancels the search. */
+  chooseUsb(deviceId: string | null): Promise<void>;
 }

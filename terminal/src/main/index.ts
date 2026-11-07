@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, session } from "electron";
 import { join } from "node:path";
 import type { CatalogSnapshot } from "../shared/contract";
 import type { NewEvent, TerminalSettings } from "../shared/types";
 import { resolveDataDir } from "./data-dir";
 import { LocalStore } from "./store";
+import { registerUsb } from "./usb";
 
 const RETENTION_DAYS = 30;
 
@@ -53,6 +54,7 @@ async function start(dataDir: string): Promise<void> {
     console.error("compact failed", err);
   }
   registerIpc(store);
+  registerUsb(session.defaultSession, () => mainWindow);
   createWindow();
 
   app.on("activate", () => {
