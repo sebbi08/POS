@@ -3,7 +3,9 @@ import { getOpenOrdersByTerminal } from "../../modules/orders/orders.projections
 import {
   createTerminal,
   deleteTerminal,
-  getTerminalItems,
+  generateTerminalKey,
+  getTerminal,
+  getTerminalKey,
   listTerminals,
   updateTerminal,
 } from "../../modules/terminals/terminals.repository.js";
@@ -14,27 +16,26 @@ const router = Router();
 router.get("/", (_req: Request, res: Response): void => {
   listTerminals().then((terminals) =>
     res.json(
-      terminals.map(({ id, name, groupIds }) => ({ id, name, groupIds })),
+      terminals.map(({ id, name, groupIds, printPickupReceipts }) => ({
+        id,
+        name,
+        groupIds,
+        printPickupReceipts,
+      })),
     ),
   );
 });
 
 router.post("/", checkAdmin, (req: Request, res: Response): void => {
-  const { name, groupIds, printerVendorId, printerProductId } = req.body;
-  createTerminal(name, groupIds, printerVendorId, printerProductId).then((id) =>
+  const { name, groupIds, printPickupReceipts } = req.body;
+  createTerminal(name, groupIds, printPickupReceipts ?? true).then((id) =>
     res.json({ id }),
   );
 });
 
 router.put("/:id", checkAdmin, (req: Request, res: Response): void => {
-  const { name, groupIds, printerVendorId, printerProductId } = req.body;
-  updateTerminal(
-    req.params.id as string,
-    name,
-    groupIds,
-    printerVendorId,
-    printerProductId,
-  ).then(() => res.json({ status: "updated" }));
+  const { name, groupIds, printPickupReceipts } = req.body;
+  updateTerminal(req.params.id as string, name, groupIds, printPickupReceipts).then(() => res.json({ status: "updated" }));
 });
 
 router.delete("/:id", checkAdmin, (req: Request, res: Response): void => {
@@ -46,8 +47,26 @@ router.delete("/:id", checkAdmin, (req: Request, res: Response): void => {
   deleteTerminal(req.params.id as string).then(() => res.json({ status: "deleted" }));
 });
 
-router.get("/:id/items", (req: Request, res: Response): void => {
-  getTerminalItems(req.params.id as string).then((items) => res.json(items));
+router.get("/:id/key", checkAdmin, (req: Request, res: Response): void => {
+  const id = req.params.id as string;
+  getTerminal(id).then(async (terminal) => {
+    if (!terminal) {
+      res.status(404).json({ error: "Terminal not found" });
+      return;
+    }
+    res.json({ key: await getTerminalKey(id) });
+  });
+});
+
+router.post("/:id/key", checkAdmin, (req: Request, res: Response): void => {
+  const id = req.params.id as string;
+  getTerminal(id).then(async (terminal) => {
+    if (!terminal) {
+      res.status(404).json({ error: "Terminal not found" });
+      return;
+    }
+    res.json({ key: await generateTerminalKey(id) });
+  });
 });
 
 export default router;

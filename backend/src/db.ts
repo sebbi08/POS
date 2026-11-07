@@ -51,6 +51,9 @@ export async function initTables(): Promise<void> {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      ALTER TABLE terminals ADD COLUMN IF NOT EXISTS api_key TEXT;
+      ALTER TABLE terminals ADD COLUMN IF NOT EXISTS print_pickup_receipts BOOLEAN NOT NULL DEFAULT TRUE;
+
       CREATE TABLE IF NOT EXISTS company_settings (
         id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
         name TEXT NOT NULL DEFAULT '',

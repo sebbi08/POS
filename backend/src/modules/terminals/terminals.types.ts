@@ -2,8 +2,7 @@ export interface Terminal {
   id: string;
   name: string;
   groupIds: string[];
-  printerVendorId?: number;
-  printerProductId?: number;
+  printPickupReceipts: boolean;
 }
 
 export interface TerminalRow {
@@ -12,6 +11,8 @@ export interface TerminalRow {
   group_ids: string[];
   printer_vendor_id: number | null;
   printer_product_id: number | null;
+  print_pickup_receipts: boolean;
+  api_key: string | null;
   created_at: string;
   updated_at: string;
 }

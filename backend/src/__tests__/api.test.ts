@@ -39,6 +39,7 @@ import authRoutes from "../api/routes/auth.routes.js";
 import companyRoutes from "../api/routes/company.routes.js";
 import orderRoutes from "../api/routes/orders.routes.js";
 import terminalsRoutes from "../api/routes/terminals.routes.js";
+import { getPool } from "../db.js";
 import { orders as orderProjections } from "../modules/orders/orders.projections.js";
 
 app.use("/api/auth", authRoutes);
@@ -90,6 +91,31 @@ describe("Terminals Routes", () => {
       .send({ name: "Bar", groupIds: [] });
     expect(res.status).toBe(200);
     expect(res.body.id).toBeTruthy();
+  });
+});
+
+describe("Terminal key routes", () => {
+  it("POST /api/terminals/:id/key without admin PIN returns 403", async () => {
+    const res = await request(app).post("/api/terminals/t1/key");
+    expect(res.status).toBe(403);
+  });
+
+  it("POST /api/terminals/:id/key returns a 32-char key", async () => {
+    vi.mocked(getPool().query).mockResolvedValueOnce({
+      rows: [{ id: "t1", name: "Bar", group_ids: [], print_pickup_receipts: true }],
+    } as never);
+    const res = await request(app)
+      .post("/api/terminals/t1/key")
+      .set("x-admin-pin", "0000");
+    expect(res.status).toBe(200);
+    expect(res.body.key).toMatch(/^[A-Za-z0-9_-]{32}$/);
+  });
+
+  it("POST /api/terminals/:id/key returns 404 for unknown terminal", async () => {
+    const res = await request(app)
+      .post("/api/terminals/nope/key")
+      .set("x-admin-pin", "0000");
+    expect(res.status).toBe(404);
   });
 });
 
