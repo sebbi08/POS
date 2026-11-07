@@ -4,14 +4,25 @@ import { dirname, join } from "node:path";
 import type { CatalogSnapshot } from "../shared/contract";
 import type { LocalEvent, NewEvent, TerminalSettings } from "../shared/types";
 
-const EVENTS = "events.jsonl";
-const SYNCED = "synced.jsonl";
+interface SyncedLine { orderId: string; syncedAt: string }
+
+/** An append-only JSON-lines file and the shape every line must have. */
+interface JsonlFile<T extends object> { name: string; isLine(value: object): value is T }
+
+const EVENTS: JsonlFile<LocalEvent> = {
+  name: "events.jsonl",
+  isLine: (v): v is LocalEvent =>
+    Number.isFinite((v as LocalEvent).seq) && typeof (v as LocalEvent).orderId === "string",
+};
+const SYNCED: JsonlFile<SyncedLine> = {
+  name: "synced.jsonl",
+  isLine: (v): v is SyncedLine =>
+    typeof (v as SyncedLine).orderId === "string" && typeof (v as SyncedLine).syncedAt === "string",
+};
 const CATALOG = "catalog.json";
 const SETTINGS = "settings.json";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NEWLINE = 0x0a;
-
-interface SyncedLine { orderId: string; syncedAt: string }
 
 /**
  * Crash-safe local storage of the terminal. An operation resolves only after its
@@ -24,10 +35,16 @@ export class LocalStore {
 
   constructor(private readonly dir: string) {}
 
+  /**
+   * Persists the batch with one write + fsync and resolves with the stored events.
+   * Not all-or-nothing: a crash during the write may leave a prefix of the batch on disk.
+   * A rejection does not prove that nothing was stored either (e.g. fsync failed after the
+   * write), so callers must re-read with `readEvents` instead of blindly retrying.
+   */
   appendEvents(events: NewEvent[]): Promise<LocalEvent[]> {
     return this.serialized(async () => {
       if (events.length === 0) return [];
-      if (this.maxSeq === null) this.maxSeq = highestSeq(await readJsonl<LocalEvent>(this.file(EVENTS)));
+      if (this.maxSeq === null) this.maxSeq = highestSeq(await this.readLines(EVENTS));
       let seq = this.maxSeq;
       const stored: LocalEvent[] = events.map((e) => ({
         seq: ++seq,
@@ -48,7 +65,7 @@ export class LocalStore {
   }
 
   readEvents(): Promise<LocalEvent[]> {
-    return this.serialized(() => readJsonl<LocalEvent>(this.file(EVENTS)));
+    return this.serialized(() => this.readLines(EVENTS));
   }
 
   markSynced(orderIds: string[]): Promise<void> {
@@ -60,7 +77,7 @@ export class LocalStore {
   }
 
   readSynced(): Promise<Record<string, string>> {
-    return this.serialized(async () => syncedByOrder(await readJsonl<SyncedLine>(this.file(SYNCED))));
+    return this.serialized(async () => syncedByOrder(await this.readLines(SYNCED)));
   }
 
   saveCatalog(c: CatalogSnapshot): Promise<void> {
@@ -79,20 +96,27 @@ export class LocalStore {
     return this.serialized(() => readJson<TerminalSettings>(this.file(SETTINGS)));
   }
 
-  /** Removes the events of orders that were synced more than `retentionDays` before `now`. */
+  /**
+   * Removes the events and synced entries of orders that were synced more than
+   * `retentionDays` before `now`.
+   */
   compact(retentionDays: number, now: Date): Promise<void> {
     return this.serialized(async () => {
       const cutoff = now.getTime() - retentionDays * DAY_MS;
-      const synced = syncedByOrder(await readJsonl<SyncedLine>(this.file(SYNCED)));
+      const syncedLines = await this.readLines(SYNCED);
+      const synced = syncedByOrder(syncedLines);
       const expired = new Set(Object.keys(synced).filter((id) => Date.parse(synced[id]) < cutoff));
       if (expired.size === 0) return;
-      const events = await readJsonl<LocalEvent>(this.file(EVENTS));
+      const events = await this.readLines(EVENTS);
       const kept = events.filter((e) => !expired.has(e.orderId));
-      if (kept.length === events.length) return;
-      await fs.mkdir(this.dir, { recursive: true });
-      await writeFileAtomic(this.file(EVENTS), toJsonl(kept));
-      // Keep counting from the pre-compaction maximum so seq values are not reused in this session.
-      this.maxSeq = Math.max(this.maxSeq ?? 0, highestSeq(events));
+      if (kept.length !== events.length) {
+        await writeFileAtomic(this.file(EVENTS.name), toJsonl(kept));
+        // Keep counting from the pre-compaction maximum so seq values are not reused in this session.
+        this.maxSeq = Math.max(this.maxSeq ?? 0, highestSeq(events));
+      }
+      // Events first: a crash in between only leaves synced entries without events (harmless),
+      // never events whose synced entry is gone (they would be uploaded again).
+      await writeFileAtomic(this.file(SYNCED.name), toJsonl(syncedLines.filter((l) => !expired.has(l.orderId))));
     });
   }
 
@@ -106,9 +130,13 @@ export class LocalStore {
     return join(this.dir, name);
   }
 
-  private async appendLines(name: string, records: object[]): Promise<void> {
+  private readLines<T extends object>(file: JsonlFile<T>): Promise<T[]> {
+    return readJsonl(this.file(file.name), file.isLine);
+  }
+
+  private async appendLines<T extends object>(file: JsonlFile<T>, records: T[]): Promise<void> {
     await fs.mkdir(this.dir, { recursive: true });
-    await appendDurably(this.file(name), toJsonl(records));
+    await appendDurably(this.file(file.name), toJsonl(records), file.isLine);
   }
 
   private async writeJson(name: string, value: unknown): Promise<void> {
@@ -134,20 +162,22 @@ function syncedByOrder(lines: SyncedLine[]): Record<string, string> {
   return result;
 }
 
-function parseRecord(text: string): object | null {
+/** Parses one line; null if it is not JSON or not of the expected shape. */
+function parseLine<T extends object>(text: string, isLine: (value: object) => value is T): T | null {
+  let value: unknown;
   try {
-    const value: unknown = JSON.parse(text);
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+    value = JSON.parse(text);
   } catch {
     return null;
   }
+  return typeof value === "object" && value !== null && !Array.isArray(value) && isLine(value) ? value : null;
 }
 
 /**
  * Every acknowledged write ends with "\n". Text after the last newline can only come
  * from a write interrupted by a crash, so it is skipped; any other bad line is corruption.
  */
-async function readJsonl<T>(path: string): Promise<T[]> {
+async function readJsonl<T extends object>(path: string, isLine: (value: object) => value is T): Promise<T[]> {
   let text: string;
   try {
     text = await fs.readFile(path, "utf8");
@@ -160,21 +190,21 @@ async function readJsonl<T>(path: string): Promise<T[]> {
   const records: T[] = [];
   lines.forEach((line, i) => {
     if (line.trim() === "") return;
-    const record = parseRecord(line);
+    const record = parseLine(line, isLine);
     if (record === null) throw new Error(`${path}: corrupt line ${i + 1}`);
-    records.push(record as T);
+    records.push(record);
   });
   if (tail.trim() !== "") {
-    const record = parseRecord(tail);
+    const record = parseLine(tail, isLine);
     if (record === null) console.warn(`${path}: skipping truncated last line ${lines.length + 1}`);
-    else records.push(record as T);
+    else records.push(record);
   }
   return records;
 }
 
 /** Appends `lines` with a single write, then fsyncs. Repairs an interrupted previous write first. */
-async function appendDurably(path: string, lines: string): Promise<void> {
-  const prefix = await repairTail(path);
+async function appendDurably<T extends object>(path: string, lines: string, isLine: (value: object) => value is T): Promise<void> {
+  const prefix = await repairTail(path, isLine);
   const fh = await fs.open(path, "a");
   let created = false;
   try {
@@ -194,7 +224,7 @@ async function appendDurably(path: string, lines: string): Promise<void> {
  * lost its newline; truncates an unfinished line otherwise. Uses its own read/write handle
  * because Windows append handles cannot truncate.
  */
-async function repairTail(path: string): Promise<string> {
+async function repairTail<T extends object>(path: string, isLine: (value: object) => value is T): Promise<string> {
   let fh: FileHandle;
   try {
     fh = await fs.open(path, "r+");
@@ -210,7 +240,7 @@ async function repairTail(path: string): Promise<string> {
     if (last[0] === NEWLINE) return "";
     const content = await fs.readFile(path);
     const end = content.lastIndexOf(NEWLINE) + 1;
-    if (parseRecord(content.subarray(end).toString("utf8")) !== null) return "\n";
+    if (parseLine(content.subarray(end).toString("utf8"), isLine) !== null) return "\n";
     console.warn(`${path}: dropping truncated last line before append`);
     await fh.truncate(end);
     await fh.sync();

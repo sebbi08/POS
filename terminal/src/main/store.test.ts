@@ -183,6 +183,71 @@ describe("LocalStore", () => {
     expect(await exists(join(dir, "events.jsonl.tmp"))).toBe(false);
   });
 
+  it("an event line without a numeric seq counts as corrupt", async () => {
+    await writeFile(
+      join(dir, "events.jsonl"),
+      `${JSON.stringify({ ...event("a"), seq: 1 })}\n${JSON.stringify(event("b"))}\n${JSON.stringify({ ...event("c"), seq: "3" })}\n`,
+    );
+
+    await expect(new LocalStore(dir).readEvents()).rejects.toThrow(/line 2/);
+  });
+
+  it("compact also removes the synced entries of the dropped orders", async () => {
+    const now = new Date("2026-12-31T12:00:00.000Z");
+    const day = 24 * 60 * 60 * 1000;
+    const recentAt = new Date(now.getTime() - 29 * day).toISOString();
+    await writeFile(
+      join(dir, "synced.jsonl"),
+      [
+        { orderId: "old", syncedAt: new Date(now.getTime() - 31 * day).toISOString() },
+        { orderId: "recent", syncedAt: recentAt },
+      ]
+        .map((l) => JSON.stringify(l) + "\n")
+        .join(""),
+    );
+    const store = new LocalStore(dir);
+    await store.appendEvents([event("old"), event("recent")]);
+
+    await store.compact(30, now);
+
+    expect(await new LocalStore(dir).readSynced()).toEqual({ recent: recentAt });
+    expect(await exists(join(dir, "synced.jsonl.tmp"))).toBe(false);
+  });
+
+  it("seq keeps counting after compact in the same instance", async () => {
+    const now = new Date("2026-12-31T12:00:00.000Z");
+    await writeFile(
+      join(dir, "synced.jsonl"),
+      JSON.stringify({ orderId: "old", syncedAt: "2026-11-01T12:00:00.000Z" }) + "\n",
+    );
+    await new LocalStore(dir).appendEvents([event("keep"), event("old")]);
+
+    const store = new LocalStore(dir);
+    await store.compact(30, now);
+    const next = await store.appendEvents([event("new")]);
+
+    expect(next[0].seq).toBe(3);
+    expect((await store.readEvents()).map((e) => [e.orderId, e.seq])).toEqual([["keep", 1], ["new", 3]]);
+  });
+
+  it("markSynced repairs a truncated last line of synced.jsonl before appending", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-07T12:00:00.000Z"), toFake: ["Date"] });
+    try {
+      await new LocalStore(dir).markSynced(["a"]);
+      await appendFile(join(dir, "synced.jsonl"), '{"orderId":"x","sync');
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      await new LocalStore(dir).markSynced(["b"]);
+
+      expect(await new LocalStore(dir).readSynced()).toEqual({
+        a: "2026-11-07T12:00:00.000Z",
+        b: "2026-11-07T12:00:00.000Z",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("concurrent appendEvents calls do not interleave or duplicate seq", async () => {
     const store = new LocalStore(dir);
 
