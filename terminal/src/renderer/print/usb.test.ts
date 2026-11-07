@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PrintError, printJobs } from "./usb";
+import { PRINT_TIMEOUT_MS, PrintError, printJobs } from "./usb";
 
 const printer = { vendorId: 1, productId: 2, name: "Epson" };
 
@@ -20,7 +20,10 @@ function mockUsb(devices: unknown[]) {
   Object.defineProperty(navigator, "usb", { configurable: true, value: { getDevices: vi.fn().mockResolvedValue(devices) } });
 }
 
-afterEach(() => { Reflect.deleteProperty(navigator, "usb"); });
+afterEach(() => {
+  vi.useRealTimers();
+  Reflect.deleteProperty(navigator, "usb");
+});
 
 describe("printJobs", () => {
   it("fails without a configured printer", async () => {
@@ -70,5 +73,28 @@ describe("printJobs", () => {
     const dev = fakeDevice({ open: vi.fn().mockRejectedValue(err) });
     mockUsb([dev]);
     await expect(printJobs(printer, [new Uint8Array([1])])).rejects.toThrow("Drucker nicht gefunden");
+  });
+
+  it("gives up on a printer that does not answer within 20 s and closes it in the background", async () => {
+    vi.useFakeTimers();
+    const dev = fakeDevice({ transferOut: vi.fn(() => new Promise(() => {})), close: vi.fn(() => new Promise(() => {})) });
+    mockUsb([dev]);
+    let outcome: unknown = "pending";
+    const printing = printJobs(printer, [new Uint8Array([1])]).catch((err: unknown) => { outcome = err; });
+    await vi.advanceTimersByTimeAsync(PRINT_TIMEOUT_MS - 1);
+    expect(outcome).toBe("pending");
+    await vi.advanceTimersByTimeAsync(1);
+    await printing;
+    expect(PRINT_TIMEOUT_MS).toBe(20_000);
+    expect(outcome).toBeInstanceOf(PrintError);
+    expect((outcome as Error).message).toBe("Drucker antwortet nicht");
+    expect(dev.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the timeout after a successful print", async () => {
+    vi.useFakeTimers();
+    mockUsb([fakeDevice()]);
+    await printJobs(printer, [new Uint8Array([1])]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -17,7 +17,7 @@ vi.mock("../sync/client", async (importOriginal) => {
   return { ...actual, listTerminals: vi.fn(), fetchCatalog: vi.fn(), uploadAll: vi.fn() };
 });
 
-import { PrintError, printJobs } from "../print/usb";
+import { PRINT_TIMEOUT_MS, PrintError, printJobs } from "../print/usb";
 import { layoutJobs } from "../print/layout";
 import { fetchCatalog, listTerminals, SyncError, uploadAll } from "../sync/client";
 
@@ -149,6 +149,40 @@ describe("App", () => {
     expect(vi.mocked(printJobs).mock.calls[1][1]).toHaveLength(2);
     expect(fake.bridge.appendEvents).toHaveBeenCalledTimes(1); // reprint persists nothing
     await waitFor(() => expect(screen.queryByText(/Buchung ist gespeichert/)).not.toBeInTheDocument());
+  });
+
+  it("a printer that never answers times out and the till keeps selling", async () => {
+    const actual = await vi.importActual<typeof import("../print/usb")>("../print/usb");
+    vi.mocked(printJobs).mockImplementation(actual.printJobs);
+    const hanging = {
+      vendorId: 1, productId: 2,
+      open: vi.fn(async () => {}), selectConfiguration: vi.fn(async () => {}), claimInterface: vi.fn(async () => {}),
+      configuration: { interfaces: [{ interfaceNumber: 0, alternate: { endpoints: [{ direction: "out", endpointNumber: 1 }] } }] },
+      transferOut: vi.fn(() => new Promise(() => {})),
+      close: vi.fn(() => new Promise(() => {})),
+    };
+    Object.defineProperty(navigator, "usb", { configurable: true, value: { getDevices: vi.fn(async () => [hanging]) } });
+    try {
+      setup({ settings, catalog, events: openOrderEvents });
+      const pay = await screen.findByRole("button", { name: "Bezahlen & Drucken" });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      fireEvent.click(pay);
+      await waitFor(() => expect(hanging.transferOut).toHaveBeenCalled());
+      await act(async () => { await vi.advanceTimersByTimeAsync(PRINT_TIMEOUT_MS); });
+      vi.useRealTimers();
+      expect(await screen.findByText(
+        "Drucker antwortet nicht – Buchung ist gespeichert. „Letzten Bon nachdrucken“ verwenden.",
+      )).toBeInTheDocument();
+      expect(hanging.close).toHaveBeenCalled();
+      expect(screen.getByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+
+      click(/Bier/);
+      await waitFor(() => expect(within(orderPanel()).getByText("Bier")).toBeInTheDocument());
+      expect(appendedTypes().at(-1)).toBe("ItemAdded");
+    } finally {
+      vi.useRealTimers();
+      Reflect.deleteProperty(navigator, "usb");
+    }
   });
 
   it("double click on Bezahlen & Drucken closes only one order", async () => {
