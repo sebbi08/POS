@@ -6,6 +6,7 @@ import AdminLayout from "../views/AdminLayout";
 import TransactionHistory from "../components/TransactionHistory";
 import ReportOverview from "../components/ReportOverview";
 import TerminalConfig from "../components/TerminalConfig";
+import CatalogImportExport from "../components/CatalogImportExport";
 
 const emptyReport = {
   from: "2026-05-13", to: "2026-05-13", orderCount: 0, cancelledCount: 0,
@@ -330,5 +331,26 @@ describe("TerminalConfig", () => {
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith("/terminals", { name: "Kasse", groupIds: [], printPickupReceipts: false }),
     );
+  });
+});
+
+describe("CatalogImportExport", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(URL, "createObjectURL");
+    Reflect.deleteProperty(URL, "revokeObjectURL");
+  });
+
+  it("sample CSV uses German sample names", async () => {
+    let blob: Blob | undefined;
+    Object.assign(URL, {
+      createObjectURL: vi.fn((b: Blob) => { blob = b; return "blob:sample"; }),
+      revokeObjectURL: vi.fn(),
+    });
+    render(<CatalogImportExport />);
+    fireEvent.click(screen.getByRole("button", { name: "Beispiel-CSV herunterladen" }));
+    const csv = await blob!.text();
+    expect(csv).toContain("Heißgetränke");
+    expect(csv).toContain("Backwaren");
+    expect(csv).not.toMatch(/Hot Drinks|Bakery|Cookie/);
   });
 });

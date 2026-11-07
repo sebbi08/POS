@@ -30,7 +30,7 @@ async function request<T>(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || "Request failed");
+    throw new Error(err.error || "Anfrage fehlgeschlagen");
   }
 
   return res.json();
@@ -62,7 +62,7 @@ export const api = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.errors?.[0] || err.error || "Request failed");
+      throw new Error(err.errors?.[0] || err.error || "Anfrage fehlgeschlagen");
     }
     return res.json();
   },
@@ -82,7 +82,7 @@ export const api = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || "Request failed");
+      throw new Error(err.error || "Anfrage fehlgeschlagen");
     }
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);

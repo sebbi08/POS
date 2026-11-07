@@ -64,10 +64,10 @@ function CatalogImportExport() {
   const generateSample = () => {
     const sample = [
       ["id", "name", "group_name", "group_vat_rate", "price"],
-      [crypto.randomUUID(), "Espresso", "Hot Drinks", "19", "2.50"],
-      [crypto.randomUUID(), "Cappuccino", "Hot Drinks", "19", "3.00"],
-      [crypto.randomUUID(), "Cookie", "Bakery", "7", "1.80"],
-      [crypto.randomUUID(), "Muffin", "Bakery", "7", "2.20"],
+      [crypto.randomUUID(), "Kaffee", "Heißgetränke", "19", "2.50"],
+      [crypto.randomUUID(), "Tee", "Heißgetränke", "19", "2.00"],
+      [crypto.randomUUID(), "Brezel", "Backwaren", "7", "1.80"],
+      [crypto.randomUUID(), "Kuchen", "Backwaren", "7", "2.20"],
     ];
     const csv = sample.map(row => row.map(v => v.includes(",") || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v).join(",")).join("\n") + "\n";
     const blob = new Blob([csv], { type: "text/csv" });
