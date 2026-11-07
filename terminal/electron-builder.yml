@@ -17,9 +17,10 @@ linux:
     - target: AppImage
       arch: [x64]
   category: Office
+  executableName: pos-kasse
 # TODO: set GitHub owner/repo before first release
 publish:
   provider: github
   owner: OWNER
   repo: REPO
-  releaseType: release
+  releaseType: draft

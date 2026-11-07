@@ -2,6 +2,8 @@
   "name": "pos-terminal",
   "productName": "POS Kasse",
   "version": "0.1.0",
+  "description": "Offline-Kasse für Vereinsfeste",
+  "author": "Sebastian Mahr",
   "private": true,
   "main": "out/main/index.js",
   "scripts": {
