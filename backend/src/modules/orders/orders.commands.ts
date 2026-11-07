@@ -2,88 +2,11 @@ import { v4 as uuid } from "uuid";
 import { appendOrderEvent } from "./order-eventstore.js";
 import { orders } from "./orders.projections.js";
 import {
-  FinalReceiptPrintedEvent,
-  ItemAddedEvent,
-  ItemRemovedEvent,
   OrderCancellationCreatedEvent,
   OrderClosedEvent,
-  OrderOpenedEvent,
-  PickupReceiptPrintedEvent,
 } from "./orders.types.js";
 
 const STREAM = (id: string) => `order-${id}`;
-
-export async function openOrder(terminalId: string): Promise<string> {
-  const id = uuid();
-  const data: OrderOpenedEvent = { id, terminalId };
-  await appendOrderEvent(
-    STREAM(id),
-    "OrderOpened",
-    data as unknown as Record<string, unknown>,
-  );
-  return id;
-}
-
-export async function addItemToOrder(
-  orderId: string,
-  itemId: string,
-  name: string,
-  qty: number,
-  unitPrice: number,
-  vatRate: number,
-): Promise<void> {
-  const total = unitPrice * qty;
-  const vatAmount = total - total / (1 + vatRate / 100);
-
-  const data: ItemAddedEvent = {
-    orderId,
-    itemId,
-    name,
-    qty,
-    unitPrice,
-    vatRate,
-    vatAmount: Math.round(vatAmount * 100) / 100,
-    total: Math.round(total * 100) / 100,
-  };
-  await appendOrderEvent(
-    STREAM(orderId),
-    "ItemAdded",
-    data as unknown as Record<string, unknown>,
-  );
-}
-
-export async function removeItemFromOrder(
-  orderId: string,
-  itemId: string,
-): Promise<void> {
-  const data: ItemRemovedEvent = { orderId, itemId };
-  await appendOrderEvent(
-    STREAM(orderId),
-    "ItemRemoved",
-    data as unknown as Record<string, unknown>,
-  );
-}
-
-export async function printPickupReceipt(
-  orderId: string,
-  itemId: string,
-): Promise<void> {
-  const data: PickupReceiptPrintedEvent = { orderId, itemId };
-  await appendOrderEvent(
-    STREAM(orderId),
-    "PickupReceiptPrinted",
-    data as unknown as Record<string, unknown>,
-  );
-}
-
-export async function printFinalReceipt(orderId: string): Promise<void> {
-  const data: FinalReceiptPrintedEvent = { orderId };
-  await appendOrderEvent(
-    STREAM(orderId),
-    "FinalReceiptPrinted",
-    data as unknown as Record<string, unknown>,
-  );
-}
 
 export async function closeOrder(
   orderId: string,

@@ -19,7 +19,6 @@ vi.mock("../config", () => ({
     port: 3001,
     pg: { connectionString: "postgresql://test:test@localhost/test" },
     adminPin: "0000",
-    receiptPdfDir: "/tmp/test",
   },
 }));
 
@@ -28,29 +27,13 @@ vi.mock("../projections/runner", () => ({
   startProjections: vi.fn().mockResolvedValue(undefined),
 }));
 
-import {
-  appendOrderEvent,
-  type StoredEvent,
-} from "../modules/orders/order-eventstore.js";
-import { openOrder } from "../modules/orders/orders.commands.js";
+import { type StoredEvent } from "../modules/orders/order-eventstore.js";
 import {
   getOpenOrdersByTerminal,
   initOrderProjections,
   orders,
 } from "../modules/orders/orders.projections.js";
 import { registerProjection } from "../projections/runner.js";
-
-describe("Orders Commands", () => {
-  it("opens an order with OrderOpened event", async () => {
-    const id = await openOrder("terminal-1");
-    expect(id).toBeTruthy();
-    expect(vi.mocked(appendOrderEvent)).toHaveBeenCalledWith(
-      expect.stringContaining("order-"),
-      "OrderOpened",
-      expect.objectContaining({ terminalId: "terminal-1" }),
-    );
-  });
-});
 
 describe("Orders Projections", () => {
   it("processes full order lifecycle: open → add → close", () => {

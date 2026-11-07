@@ -28,7 +28,6 @@ vi.mock("../config", () => ({
   config: {
     pg: { connectionString: "postgresql://test:test@localhost/test" },
     adminPin: "0000",
-    receiptPdfDir: "/tmp/test",
   },
 }));
 
@@ -132,39 +131,19 @@ describe("Company Routes", () => {
   });
 });
 
-describe("Order Route Constraints", () => {
-  it("POST /api/orders/open rejects when terminal already has an open order", async () => {
-    orderProjections.clear();
-    orderProjections.set("existing-order", {
-      id: "existing-order",
-      terminalId: "t1",
-      status: "open",
-      items: [],
-      pickupSeq: 0,
-      totalGross: 0,
-      totalVat: {},
-      totalNet: 0,
-      createdAt: new Date(),
-    } as any);
+describe("Order Routes", () => {
+  it("POST /api/orders/:id/cancel without admin PIN returns 403", async () => {
+    const res = await request(app)
+      .post("/api/orders/some-order/cancel")
+      .send({ reason: "x" });
+    expect(res.status).toBe(403);
+  });
 
+  it("POST /api/orders/open returns 404", async () => {
     const res = await request(app)
       .post("/api/orders/open")
       .send({ terminalId: "t1" });
-
-    expect(res.status).toBe(409);
-    expect(res.body.error).toContain("already has an open order");
-    expect(res.body.orderId).toBe("existing-order");
-  });
-
-  it("POST /api/orders/open succeeds when terminal has no open order", async () => {
-    orderProjections.clear();
-
-    const res = await request(app)
-      .post("/api/orders/open")
-      .send({ terminalId: "t2" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.id).toBeTruthy();
+    expect(res.status).toBe(404);
   });
 });
 

@@ -15,7 +15,6 @@ vi.mock("../config", () => ({
     port: 3001,
     pg: { connectionString: "postgresql://test:test@localhost/test" },
     adminPin: "0000",
-    receiptPdfDir: "/tmp/test",
   },
 }));
 

@@ -14,7 +14,6 @@ vi.mock("../api/client", () => ({
   api: {
     get: vi.fn().mockResolvedValue([
       { id: "t1", name: "Bar", groupIds: ["g1"] },
-      { id: "t2", name: "Kitchen", groupIds: ["g2"] },
     ]),
     post: vi.fn(),
     setAdminPin: vi.fn(),
@@ -28,33 +27,18 @@ describe("Login Page", () => {
     vi.clearAllMocks();
   });
 
-  it("shows terminal buttons after loading", async () => {
+  it("shows the PIN entry directly, without terminal buttons", async () => {
     render(<MemoryRouter><Login /></MemoryRouter>);
-    await waitFor(() => {
-      expect(screen.getByText("Bar")).toBeInTheDocument();
-      expect(screen.getByText("Kitchen")).toBeInTheDocument();
-    });
-  });
-
-  it("navigates to /pos/:id when terminal is clicked", async () => {
-    render(<MemoryRouter><Login /></MemoryRouter>);
-    await waitFor(() => screen.getByText("Bar"));
-    fireEvent.click(screen.getByText("Bar"));
-    expect(mockNavigate).toHaveBeenCalledWith("/pos/t1");
-  });
-
-  it("shows PIN pad when Admin Panel button is clicked", async () => {
-    render(<MemoryRouter><Login /></MemoryRouter>);
-    await waitFor(() => screen.getByText("Bar"));
-    fireEvent.click(screen.getByText("Admin Panel"));
     expect(screen.getByText("Admin Login")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.queryByText("Admin Panel")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bar")).not.toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalled();
   });
 
   it("shows PIN dots as digits are entered", async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><Login /></MemoryRouter>);
-    await waitFor(() => screen.getByText("Bar"));
-    fireEvent.click(screen.getByText("Admin Panel"));
 
     await user.click(screen.getByText("1"));
     await user.click(screen.getByText("2"));
@@ -70,8 +54,6 @@ describe("Login Page", () => {
     vi.mocked(api.post).mockResolvedValueOnce({ role: "admin" });
 
     render(<MemoryRouter><Login /></MemoryRouter>);
-    await waitFor(() => screen.getByText("Bar"));
-    fireEvent.click(screen.getByText("Admin Panel"));
 
     await user.click(screen.getByText("0"));
     await user.click(screen.getByText("0"));
@@ -90,8 +72,6 @@ describe("Login Page", () => {
     vi.mocked(api.post).mockRejectedValueOnce(new Error("Invalid PIN"));
 
     render(<MemoryRouter><Login /></MemoryRouter>);
-    await waitFor(() => screen.getByText("Bar"));
-    fireEvent.click(screen.getByText("Admin Panel"));
 
     await user.click(screen.getByText("1"));
     await user.click(screen.getByText("2"));
@@ -102,15 +82,5 @@ describe("Login Page", () => {
     await waitFor(() => {
       expect(screen.getByText("Invalid PIN")).toBeInTheDocument();
     });
-  });
-
-  it("Back button returns to terminal selection", async () => {
-    render(<MemoryRouter><Login /></MemoryRouter>);
-    await waitFor(() => screen.getByText("Bar"));
-    fireEvent.click(screen.getByText("Admin Panel"));
-    expect(screen.getByText("Admin Login")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText("Back"));
-    expect(screen.getByText("Bar")).toBeInTheDocument();
   });
 });

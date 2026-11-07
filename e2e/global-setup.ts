@@ -34,7 +34,7 @@ async function globalSetup() {
   try {
     execSync(
       `docker compose exec -T postgres psql -U pos -c "CREATE DATABASE pos_e2e;" 2>/dev/null; ` +
-      `docker compose exec -T postgres psql -U pos -d pos_e2e -c "TRUNCATE TABLE order_events, items, item_groups, terminals, company_settings CASCADE;"`,
+      `docker compose exec -T postgres psql -U pos -d pos_e2e -c "TRUNCATE TABLE order_events, synced_orders, items, item_groups, terminals, company_settings CASCADE;"`,
       { stdio: "ignore", shell: "/bin/bash" },
     );
   } catch { /* table may not exist on first run */ }

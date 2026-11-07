@@ -28,7 +28,6 @@ vi.mock("../config", () => ({
   config: {
     pg: { connectionString: "postgresql://test:test@localhost/test" },
     adminPin: "0000",
-    receiptPdfDir: "/tmp/test",
   },
 }));
 
