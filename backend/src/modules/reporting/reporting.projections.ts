@@ -24,6 +24,8 @@ function inRange(t: Date | undefined, from: string, to: string): boolean {
   return day >= from && day <= to;
 }
 
+const round2 = (x: number): number => Math.round(x * 100) / 100;
+
 const sumVat = (v: Record<number, number>): number =>
   Object.values(v).reduce((a, b) => a + b, 0);
 
@@ -77,6 +79,15 @@ export function getReport(from: string, to: string): Report {
     terminal.orderCount++;
     terminal.total += order.totalGross;
   }
+
+  report.totalGross = round2(report.totalGross);
+  report.totalVat = round2(report.totalVat);
+  report.totalNet = round2(report.totalNet);
+  for (const g of Object.values(report.vatByGroup)) {
+    g.gross = round2(g.gross);
+    g.vat = round2(g.vat);
+  }
+  for (const t of Object.values(report.byTerminal)) t.total = round2(t.total);
 
   report.topItems = Array.from(itemCounts, ([itemId, { name, count }]) => ({
     itemId,

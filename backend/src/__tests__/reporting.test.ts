@@ -226,19 +226,50 @@ describe("Reporting", () => {
 
     const r = getReport("2026-06-01", "2026-06-01");
     expect(r.orderCount).toBe(2);
-    expect(r.totalGross).toBeCloseTo(8.0);
-    expect(r.totalVat).toBeCloseTo(1.0);
-    expect(r.totalNet).toBeCloseTo(7.0);
+    expect(r.totalGross).toBe(8);
+    expect(r.totalVat).toBe(1);
+    expect(r.totalNet).toBe(7);
     expect(r.vatByGroup["19"].rate).toBe(19);
-    expect(r.vatByGroup["19"].gross).toBeCloseTo(5.0);
-    expect(r.vatByGroup["19"].vat).toBeCloseTo(0.8);
-    expect(r.vatByGroup["7"].gross).toBeCloseTo(3.0);
+    expect(r.vatByGroup["19"].gross).toBe(5);
+    expect(r.vatByGroup["19"].vat).toBe(0.8);
+    expect(r.vatByGroup["7"].gross).toBe(3);
     expect(r.byTerminal["t1"]).toEqual({ orderCount: 1, total: 5.0 });
     expect(r.byTerminal["t2"]).toEqual({ orderCount: 1, total: 3.0 });
     expect(r.topItems).toEqual([
       { itemId: "i1", name: "Espresso", count: 2 },
       { itemId: "i2", name: "Cake", count: 1 },
     ]);
+  });
+
+  it("rounds money sums to cents", () => {
+    for (const [id, gross] of [
+      ["o1", 0.1],
+      ["o2", 0.2],
+    ] as const) {
+      sale(id, "2026-06-01T10:00:00Z", {
+        items: [
+          {
+            itemId: "i1",
+            name: "X",
+            qty: 1,
+            unitPrice: gross,
+            vatRate: 19,
+            vatAmount: gross,
+            total: gross,
+          },
+        ],
+        totalGross: gross,
+        totalVat: { 19: gross },
+        totalNet: gross,
+      });
+    }
+    const r = getReport("2026-06-01", "2026-06-01");
+    expect(r.totalGross).toBe(0.3);
+    expect(r.totalVat).toBe(0.3);
+    expect(r.totalNet).toBe(0.3);
+    expect(r.vatByGroup["19"].gross).toBe(0.3);
+    expect(r.vatByGroup["19"].vat).toBe(0.3);
+    expect(r.byTerminal["t1"].total).toBe(0.3);
   });
 
   it("filters and sorts transactions", () => {
@@ -298,6 +329,17 @@ describe("Reporting", () => {
           .set(pin);
         expect(res.status).toBe(400);
       }
+    });
+
+    it("ignores repeated query params instead of failing", async () => {
+      sale("o1", "2026-06-01T10:00:00Z", { totalGross: 10 });
+      const res = await request(app)
+        .get(
+          "/api/reporting/transactions?from=2026-06-01&to=2026-06-01&search=a&search=b&terminal=x&terminal=y&status=closed&status=closed",
+        )
+        .set(pin);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(1);
     });
 
     it("returns the report for a valid range", async () => {

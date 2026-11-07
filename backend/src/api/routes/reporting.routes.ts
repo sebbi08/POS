@@ -36,13 +36,15 @@ router.get("/summary", (req: Request, res: Response): void => {
 router.get("/transactions", (req: Request, res: Response): void => {
   const range = parseRange(req, res);
   if (!range) return;
+  const str = (v: unknown): string | undefined =>
+    typeof v === "string" ? v : undefined;
   const status = req.query.status;
   res.json(
     listTransactions({
       ...range,
       status: status === "closed" || status === "cancelled" ? status : "all",
-      terminal: req.query.terminal as string | undefined,
-      search: req.query.search as string | undefined,
+      terminal: str(req.query.terminal),
+      search: str(req.query.search),
     }),
   );
 });
