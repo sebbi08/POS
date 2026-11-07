@@ -11,6 +11,7 @@ import catalogRoutes from "./api/routes/catalog.routes.js";
 import companyRoutes from "./api/routes/company.routes.js";
 import ordersRoutes from "./api/routes/orders.routes.js";
 import reportingRoutes from "./api/routes/reporting.routes.js";
+import syncRoutes from "./api/routes/sync.routes.js";
 import terminalsRoutes from "./api/routes/terminals.routes.js";
 
 const startupLog = (msg: string) =>
@@ -22,7 +23,7 @@ startupLog(
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -34,6 +35,7 @@ app.use("/api/orders", ordersRoutes);
 app.use("/api/terminals", terminalsRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api/company", companyRoutes);
+app.use("/api/sync", syncRoutes);
 
 startupLog("Registering projections…");
 const projStart = Date.now();

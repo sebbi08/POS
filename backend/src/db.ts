@@ -62,6 +62,12 @@ export async function initTables(): Promise<void> {
         vat_id TEXT NOT NULL DEFAULT '',
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS synced_orders (
+        order_id TEXT PRIMARY KEY,
+        terminal_id TEXT NOT NULL,
+        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     tablesInitialized = true;
     console.log(
