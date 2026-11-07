@@ -8,7 +8,7 @@ import {
 import { cancellableOrders, pendingUploads, unsyncedCount } from "../domain/sync-selection";
 import { printJobs } from "../print/usb";
 import { fetchCatalog as requestCatalog, SyncError, uploadAll } from "../sync/client";
-import { clockWarningText, SAVE_FAILED, syncErrorText, uploadMessage, type Message } from "./messages";
+import { clockWarningText, SAVE_FAILED, SAVE_SUSPECT, syncErrorText, uploadMessage, type Message } from "./messages";
 import { printFailureText, receiptJobs } from "./receipts";
 
 interface Data {
@@ -17,6 +17,8 @@ interface Data {
   events: LocalEvent[];
   synced: Record<string, string>;
 }
+
+type SyncKind = "catalog" | "upload";
 
 const EMPTY: Data = { settings: null, catalog: null, events: [], synced: {} };
 const now = () => new Date().toISOString();
@@ -34,7 +36,7 @@ export function useTerminal() {
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
   const [pending, setPending] = useState(0);
-  const [syncing, setSyncing] = useState(false);
+  const [sync, setSync] = useState<SyncKind | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const syncingRef = useRef(false);
   /** Orders in an upload that is still waiting for the server; they must not be cancelled meanwhile. */
@@ -97,15 +99,30 @@ export function useTerminal() {
     if (!(await persist(events))) setMessage(SAVE_FAILED);
   }, [persist]);
 
-  const print = useCallback(async (order: LocalOrder, copy: boolean) => {
+  /** Prints the receipts; returns the German error text, or null when printed. */
+  const print = useCallback(async (order: LocalOrder, copy: boolean): Promise<string | null> => {
     const { settings, catalog } = dataRef.current;
-    if (!settings || !catalog) return;
+    if (!settings || !catalog) return null;
     try {
       await printJobs(settings.printer, receiptJobs(order, catalog, settings, copy));
+      return null;
     } catch (err) {
-      setMessage({ kind: "error", text: printFailureText(err) });
+      return printFailureText(err);
     }
   }, []);
+
+  /**
+   * Prints a booking that is on disk. `saved` false means appendEvents reported an error although
+   * the re-read shows the booking: it is kept and printed, but the storage problem is not hidden.
+   */
+  const printBooking = useCallback(async (order: LocalOrder, saved: boolean) => {
+    const printError = await print(order, false);
+    if (!saved) {
+      setMessage({ kind: "error", text: printError ? `${SAVE_SUSPECT.text} ${printError}` : SAVE_SUSPECT.text });
+    } else if (printError) {
+      setMessage({ kind: "error", text: printError });
+    }
+  }, [print]);
 
   const saveSettingsNow = useCallback(async (next: TerminalSettings): Promise<boolean> => {
     try {
@@ -118,16 +135,16 @@ export function useTerminal() {
     }
   }, [commit]);
 
-  const beginSync = () => {
+  const beginSync = (kind: SyncKind) => {
     if (syncingRef.current) return false;
     syncingRef.current = true;
-    setSyncing(true);
+    setSync(kind);
     setMessage(null);
     return true;
   };
   const endSync = () => {
     syncingRef.current = false;
-    setSyncing(false);
+    setSync(null);
   };
 
   const addItem = (itemId: string) => enqueue(async () => {
@@ -165,7 +182,7 @@ export function useTerminal() {
       if (!saved) setMessage(SAVE_FAILED);
       return;
     }
-    await print(closed, false);
+    await printBooking(closed, saved);
   });
 
   const cancel = (orderId: string) => enqueue(async () => {
@@ -183,20 +200,21 @@ export function useTerminal() {
       if (!saved) setMessage(SAVE_FAILED);
       return;
     }
-    await print(cancellation, false);
+    await printBooking(cancellation, saved);
   });
 
   const reprintLast = () => enqueue(async () => {
     const last = lastPrintable(currentOrders());
     if (!last) return;
     setMessage(null);
-    await print(last, true);
+    const printError = await print(last, true);
+    if (printError) setMessage({ kind: "error", text: printError });
   });
 
   /** Fetches the catalog; with `setup` it uses those credentials and stores them on success. */
   const fetchCatalog = async (setup?: TerminalSettings): Promise<boolean> => {
     const credentials = setup ?? dataRef.current.settings;
-    if (!credentials || !beginSync()) return false;
+    if (!credentials || !beginSync("catalog")) return false;
     try {
       let result: Awaited<ReturnType<typeof requestCatalog>>;
       try {
@@ -207,17 +225,31 @@ export function useTerminal() {
       }
       let saved = false;
       await enqueue(async () => {
-        const base = setup ?? dataRef.current.settings;
+        const previous = dataRef.current;
+        const base = setup ?? previous.settings;
         if (!base) return;
+        const next = { ...base, lastCatalogFetchAt: now(), clockSkewMs: result.clockSkewMs };
         try {
           await bridge().saveCatalog(result.catalog);
         } catch {
           setMessage(SAVE_FAILED);
           return;
         }
-        commit({ catalog: result.catalog });
-        saved = await saveSettingsNow({ ...base, lastCatalogFetchAt: now(), clockSkewMs: result.clockSkewMs });
-        if (saved) setMessage({ kind: "info", text: "Artikel aktualisiert" });
+        try {
+          await bridge().saveSettings(next);
+        } catch {
+          setMessage(SAVE_FAILED);
+          if (!setup) {
+            commit({ catalog: result.catalog }); // same terminal: the new catalog is valid as saved
+          } else if (previous.catalog) {
+            // Setup: a new terminal's catalog must not stay on disk next to the old credentials.
+            try { await bridge().saveCatalog(previous.catalog); } catch { /* error already shown */ }
+          }
+          return;
+        }
+        commit({ catalog: result.catalog, settings: next });
+        setMessage({ kind: "info", text: "Artikel aktualisiert" });
+        saved = true;
       });
       return saved;
     } finally {
@@ -227,7 +259,7 @@ export function useTerminal() {
 
   const upload = async (): Promise<void> => {
     const { settings, events, synced } = dataRef.current;
-    if (!settings || !beginSync()) return;
+    if (!settings || !beginSync("upload")) return;
     try {
       const uploads = pendingUploads(events, currentOrders(), synced);
       for (const u of uploads) uploading.current.add(u.orderId);
@@ -258,7 +290,11 @@ export function useTerminal() {
     }
   };
 
-  const saveSettings = (next: TerminalSettings) => enqueue(async () => { await saveSettingsNow(next); });
+  /** Merges the patch into the settings current when the write runs, so no queued change is lost. */
+  const saveSettings = (patch: Partial<TerminalSettings>) => enqueue(async () => {
+    const current = dataRef.current.settings;
+    if (current) await saveSettingsNow({ ...current, ...patch });
+  });
   const dismissMessage = () => setMessage(null);
 
   const orders = ordersOf(data.events);
@@ -273,7 +309,8 @@ export function useTerminal() {
     canReprint: lastPrintable(orders) !== undefined,
     clockWarning: clockWarningText(data.settings?.clockSkewMs),
     busy: pending > 0,
-    syncing,
+    syncing: sync !== null,
+    uploading: sync === "upload",
     message,
     actions: {
       addItem, changeQty, removeLine, discard, checkout, cancel, reprintLast,

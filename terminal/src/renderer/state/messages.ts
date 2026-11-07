@@ -4,6 +4,11 @@ export interface Message { kind: "error" | "info"; text: string }
 
 export const SAVE_FAILED: Message = { kind: "error", text: "Speichern fehlgeschlagen – bitte erneut versuchen" };
 
+/** appendEvents failed, yet the re-read store holds the booking. */
+export const SAVE_SUSPECT: Message = {
+  kind: "error", text: "Speichern meldete einen Fehler – Buchung ist vorhanden, bitte Speicherplatz prüfen.",
+};
+
 export function syncErrorText(err: unknown): string {
   return err instanceof SyncError ? err.message : "Unerwartete Antwort vom Server";
 }

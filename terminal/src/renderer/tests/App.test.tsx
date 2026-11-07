@@ -34,6 +34,8 @@ const openOrderEvents: NewEvent[] = [
   },
 ];
 
+const STORAGE_WARNING = "Speichern meldete einen Fehler – Buchung ist vorhanden, bitte Speicherplatz prüfen.";
+
 let fake: ReturnType<typeof installFakeBridge>;
 
 function setup(init: Parameters<typeof installFakeBridge>[0]) {
@@ -323,7 +325,7 @@ describe("App", () => {
     expect(screen.getByText("Keine offene Bestellung. Artikel antippen zum Starten.")).toBeInTheDocument();
   });
 
-  it("checkout whose events reached the disk despite an error still prints and shows no save error", async () => {
+  it("checkout whose events reached the disk despite an error still prints and warns about storage", async () => {
     setup({ settings, catalog, events: openOrderEvents });
     const pay = await screen.findByRole("button", { name: "Bezahlen & Drucken" });
     const persist = fake.bridge.appendEvents.getMockImplementation()!;
@@ -331,7 +333,20 @@ describe("App", () => {
     fireEvent.click(pay);
     await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    expect(screen.getByText(STORAGE_WARNING)).toBeInTheDocument();
     expect(screen.queryByText("Speichern fehlgeschlagen – bitte erneut versuchen")).not.toBeInTheDocument();
+  });
+
+  it("cancellation that reached the disk despite an error still prints and warns about storage", async () => {
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    fireEvent.click(await screen.findByRole("button", { name: "Storno" }));
+    fireEvent.click(screen.getByRole("button", { name: /#aaaaaaaa/ }));
+    const persist = fake.bridge.appendEvents.getMockImplementation()!;
+    fake.bridge.appendEvents.mockImplementationOnce(async (evs) => { await persist(evs); throw new Error("IPC"); });
+    click("Ja, stornieren");
+    await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(STORAGE_WARNING)).toBeInTheDocument();
+    expect(vi.mocked(layoutJobs).mock.calls[0][0].cancelsOrderId).toBe(SALE_A);
   });
 
   it("Verwerfen asks for confirmation", async () => {
@@ -366,5 +381,119 @@ describe("App", () => {
     expect(screen.getByLabelText("Serveradresse")).toHaveValue("https://kasse.example");
     click("Abbrechen");
     expect(screen.getByRole("button", { name: /Bier/ })).toBeInTheDocument();
+  });
+
+  it("re-setup is blocked while an order is open", async () => {
+    setup({ settings, catalog, events: openOrderEvents });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    expect(screen.getByRole("button", { name: "Terminal neu einrichten" })).toBeDisabled();
+    expect(screen.getByText("Erst offene Bestellung abschließen oder verwerfen")).toBeInTheDocument();
+  });
+
+  it("re-setup is blocked while a sync is running", async () => {
+    vi.mocked(uploadAll).mockImplementation(() => new Promise(() => {}));
+    setup({ settings, catalog });
+    fireEvent.click(await screen.findByRole("button", { name: "Buchungen übertragen" }));
+    await waitFor(() => expect(uploadAll).toHaveBeenCalled());
+    click("Einstellungen");
+    expect(screen.getByRole("button", { name: "Terminal neu einrichten" })).toBeDisabled();
+    expect(screen.getByText("Abgleich läuft – bitte warten")).toBeInTheDocument();
+  });
+
+  it("re-setup whose settings cannot be saved restores the old catalog and keeps the till", async () => {
+    const other = { ...catalog, terminal: { ...catalog.terminal, name: "Grill" }, items: [{ id: "i9", name: "Steak", groupId: "g2", price: 9 }] };
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }, { id: "t2", name: "Grill" }]);
+    vi.mocked(fetchCatalog).mockResolvedValue({ catalog: other, clockSkewMs: 0 });
+    setup({ settings, catalog });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    click("Terminal neu einrichten");
+    click("Terminals laden");
+    fireEvent.click(await screen.findByRole("button", { name: "Grill" }));
+    fake.bridge.saveSettings.mockRejectedValueOnce(new Error("EIO"));
+    click("Einrichten & Artikel abholen");
+    expect(await screen.findByText("Speichern fehlgeschlagen – bitte erneut versuchen")).toBeInTheDocument();
+    expect(fake.bridge.saveCatalog.mock.calls.map(([c]) => c.terminal.name)).toEqual(["Grill", "Theke 1"]);
+    expect(fake.state.catalog).toEqual(catalog);
+    expect(fake.state.settings).toEqual(settings);
+    click("Abbrechen");
+    expect(screen.getByRole("button", { name: /Bier/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Steak/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Theke 1")).toBeInTheDocument();
+  });
+
+  it("setup shows the generic sync text when listing terminals fails unexpectedly", async () => {
+    vi.mocked(listTerminals).mockRejectedValue(new TypeError("body.map is not a function"));
+    setup({});
+    fireEvent.change(await screen.findByLabelText("Serveradresse"), { target: { value: "kasse.example" } });
+    click("Terminals laden");
+    expect(await screen.findByText("Unerwartete Antwort vom Server")).toBeInTheDocument();
+  });
+
+  it("a settings toggle queued behind a catalog fetch keeps the new fetch time", async () => {
+    let releaseCatalog: () => void = () => {};
+    vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 0 });
+    setup({ settings, catalog });
+    const save = fake.bridge.saveCatalog.getMockImplementation()!;
+    fake.bridge.saveCatalog.mockImplementationOnce((c) => new Promise<void>((resolve) => {
+      releaseCatalog = () => { void save(c).then(resolve); };
+    }));
+    fireEvent.click(await screen.findByRole("button", { name: "Artikel abholen" }));
+    await waitFor(() => expect(fake.bridge.saveCatalog).toHaveBeenCalled());
+    click("Einstellungen");
+    fireEvent.click(screen.getByLabelText("Rückgeldrechner anzeigen"));
+    await act(async () => { releaseCatalog(); });
+    await waitFor(() => expect(fake.bridge.saveSettings).toHaveBeenCalledTimes(2));
+    expect(fake.state.settings?.changeCalculator).toBe(true);
+    expect(fake.state.settings?.lastCatalogFetchAt).not.toBe(T0);
+  });
+
+  it("printer chosen in PrinterSettings is persisted through saveSettings", async () => {
+    Object.defineProperty(navigator, "usb", {
+      configurable: true,
+      value: { requestDevice: vi.fn(async () => ({ vendorId: 0x416, productId: 0x5011, productName: "TM-T88V" })) },
+    });
+    setup({ settings: { ...settings, printer: null }, catalog });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    fireEvent.click(screen.getByLabelText("Druckereinstellungen"));
+    click("Suchen");
+    await screen.findByText("Drucker übernommen – zum Behalten speichern");
+    click("Speichern");
+    const printer = { vendorId: 0x416, productId: 0x5011, name: "TM-T88V (0x416:0x5011)" };
+    await waitFor(() => expect(fake.bridge.saveSettings).toHaveBeenCalledWith({ ...settings, printer }));
+    expect(await screen.findByText(/TM-T88V \(0x416:0x5011\) · 80 mm/)).toBeInTheDocument();
+  });
+
+  it("quick double tap on an item opens one order with qty 2", async () => {
+    setup({ settings, catalog });
+    const bier = await screen.findByRole("button", { name: /Bier/ });
+    await act(async () => {
+      bier.click();
+      bier.click();
+    });
+    await waitFor(() => expect(within(orderPanel()).getByText("2")).toBeInTheDocument());
+    expect(appendedTypes().filter((t) => t === "OrderOpened")).toHaveLength(1);
+    expect(appendedTypes()).toEqual(["OrderOpened", "ItemAdded", "ItemAdded"]);
+  });
+
+  it("Storno of an order that is being uploaded is refused", async () => {
+    vi.mocked(uploadAll).mockImplementation(() => new Promise(() => {}));
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    fireEvent.click(await screen.findByRole("button", { name: "Storno" }));
+    fireEvent.click(screen.getByRole("button", { name: /#aaaaaaaa/ }));
+    click("Buchungen übertragen"); // reachable only in this test; the dialog covers it on screen
+    await waitFor(() => expect(uploadAll).toHaveBeenCalled());
+    click("Ja, stornieren");
+    expect(await screen.findByText("Buchung kann nicht mehr storniert werden")).toBeInTheDocument();
+    expect(fake.bridge.appendEvents).not.toHaveBeenCalled();
+    expect(printJobs).not.toHaveBeenCalled();
+  });
+
+  it("Storno stays available while only the catalog is being fetched", async () => {
+    vi.mocked(fetchCatalog).mockImplementation(() => new Promise(() => {}));
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    fireEvent.click(await screen.findByRole("button", { name: "Artikel abholen" }));
+    await waitFor(() => expect(fetchCatalog).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Buchungen übertragen" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Storno" })).toBeEnabled();
   });
 });

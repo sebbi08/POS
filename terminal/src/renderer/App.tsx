@@ -61,6 +61,7 @@ export default function App() {
         unsyncedCount={t.unsyncedCount}
         busy={t.busy}
         syncing={t.syncing}
+        uploading={t.uploading}
         canReprint={t.canReprint}
         onFetchCatalog={() => void actions.fetchCatalog()}
         onUpload={() => void actions.upload()}
@@ -107,7 +108,9 @@ export default function App() {
         <SettingsDialog
           settings={settings}
           unsyncedCount={t.unsyncedCount}
-          onSave={(next) => void actions.saveSettings(next)}
+          hasOpenOrder={openOrder !== undefined}
+          syncing={t.syncing}
+          onSave={(patch) => void actions.saveSettings(patch)}
           onResetup={() => { setDialog(null); setResetup(true); }}
           onClose={() => setDialog(null)}
         />

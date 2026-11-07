@@ -4,13 +4,25 @@ import PrinterSettings from "./PrinterSettings";
 interface Props {
   settings: TerminalSettings;
   unsyncedCount: number;
-  onSave: (next: TerminalSettings) => void;
+  hasOpenOrder: boolean;
+  syncing: boolean;
+  /** Only the changed fields; they are merged into the latest settings when written. */
+  onSave: (patch: Partial<TerminalSettings>) => void;
   onResetup: () => void;
   onClose: () => void;
 }
 
-function SettingsDialog({ settings, unsyncedCount, onSave, onResetup, onClose }: Props) {
-  const resetupBlocked = unsyncedCount > 0;
+/** Why „Terminal neu einrichten“ is not possible right now, or null. */
+function resetupBlocker({ unsyncedCount, hasOpenOrder, syncing }: Props): string | null {
+  if (unsyncedCount > 0) return "Erst alle Buchungen übertragen";
+  if (hasOpenOrder) return "Erst offene Bestellung abschließen oder verwerfen";
+  if (syncing) return "Abgleich läuft – bitte warten";
+  return null;
+}
+
+function SettingsDialog(props: Props) {
+  const { settings, onSave, onResetup, onClose } = props;
+  const blocker = resetupBlocker(props);
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
@@ -25,14 +37,17 @@ function SettingsDialog({ settings, unsyncedCount, onSave, onResetup, onClose }:
                 {settings.printer ? settings.printer.name : "Kein Drucker eingerichtet"} · {settings.paperWidth} mm
               </div>
             </div>
-            <PrinterSettings settings={settings} onSave={onSave} />
+            <PrinterSettings
+              settings={settings}
+              onSave={(next) => onSave({ printer: next.printer, paperWidth: next.paperWidth })}
+            />
           </div>
 
           <label className="flex items-center gap-3 bg-gray-700 rounded-lg px-3 py-3 text-white cursor-pointer">
             <input
               type="checkbox"
               checked={settings.changeCalculator}
-              onChange={(e) => onSave({ ...settings, changeCalculator: e.target.checked })}
+              onChange={(e) => onSave({ changeCalculator: e.target.checked })}
               className="w-5 h-5"
             />
             Rückgeldrechner anzeigen
@@ -41,12 +56,12 @@ function SettingsDialog({ settings, unsyncedCount, onSave, onResetup, onClose }:
           <div>
             <button
               onClick={onResetup}
-              disabled={resetupBlocked}
+              disabled={blocker !== null}
               className="w-full bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white rounded-lg py-3 font-semibold"
             >
               Terminal neu einrichten
             </button>
-            {resetupBlocked && <p className="text-yellow-300 text-sm mt-1">Erst alle Buchungen übertragen</p>}
+            {blocker && <p className="text-yellow-300 text-sm mt-1">{blocker}</p>}
           </div>
         </div>
 

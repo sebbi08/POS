@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { TerminalSettings } from "../../shared/types";
-import { listTerminals, normalizeServerUrl, SyncError } from "../sync/client";
+import { syncErrorText } from "../state/messages";
+import { listTerminals, normalizeServerUrl } from "../sync/client";
 
 interface Props {
   /** Current settings when re-setting up; their local preferences (printer, …) are kept. */
@@ -37,7 +38,7 @@ function SetupWizard({ initial, onSetup, onCancel }: Props) {
       setTerminalId(list.some((t) => t.id === initial?.terminalId) ? initial!.terminalId : null);
       if (list.length === 0) setError("Auf dem Server sind keine Terminals angelegt");
     } catch (err) {
-      setError(err instanceof SyncError ? err.message : "Server nicht erreichbar");
+      setError(syncErrorText(err));
     } finally {
       setWorking(false);
     }

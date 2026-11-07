@@ -4,6 +4,8 @@ interface Props {
   unsyncedCount: number;
   busy: boolean;
   syncing: boolean;
+  /** Bookings in flight must not be cancelled; a catalog fetch does not block Storno. */
+  uploading: boolean;
   canReprint: boolean;
   onFetchCatalog: () => void;
   onUpload: () => void;
@@ -34,7 +36,7 @@ function StatusBar(p: Props) {
         <button onClick={p.onFetchCatalog} disabled={p.syncing} className={button}>Artikel abholen</button>
         <button onClick={p.onUpload} disabled={p.syncing} className={button}>Buchungen übertragen</button>
         <button onClick={p.onReprint} disabled={p.busy || !p.canReprint} className={button}>Letzten Bon nachdrucken</button>
-        <button onClick={p.onCancel} disabled={p.busy || p.syncing} className={button}>Storno</button>
+        <button onClick={p.onCancel} disabled={p.busy || p.uploading} className={button}>Storno</button>
         <button onClick={p.onSettings} className={button}>Einstellungen</button>
       </div>
     </header>
