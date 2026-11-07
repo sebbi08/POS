@@ -46,6 +46,12 @@ async function globalSetup() {
   execSync("cd backend && node_modules/.bin/tsc", { stdio: "inherit" });
   log(`  tsc done in ${Date.now() - tscStart}ms`);
 
+  // Build the terminal app that terminal.spec.ts launches with Electron
+  log("Building terminal app…");
+  const terminalStart = Date.now();
+  execSync("cd terminal && npx electron-vite build", { stdio: "inherit" });
+  log(`  Terminal build done in ${Date.now() - terminalStart}ms`);
+
   // Start servers manually (bypass Playwright's slow port polling)
   log("Starting backend…");
   const backendStart = Date.now();
