@@ -40,6 +40,8 @@ describe("receipt layout", () => {
   it("formatAmount uses comma decimals", () => {
     expect(formatAmount(7.5)).toBe("7,50");
     expect(formatAmount(-1.2)).toBe("-1,20");
+    expect(formatAmount(-0)).toBe("0,00");
+    expect(formatAmount(-0.001)).toBe("0,00");
   });
 
   it("final receipt contains German totals with comma decimals", () => {

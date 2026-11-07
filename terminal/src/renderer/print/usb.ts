@@ -14,13 +14,12 @@ interface UsbDevice {
   close(): Promise<void>;
   selectConfiguration(n: number): Promise<void>;
   claimInterface(n: number): Promise<void>;
-  transferOut(endpoint: number, data: Uint8Array): Promise<unknown>;
+  transferOut(endpoint: number, data: Uint8Array): Promise<{ status?: string } | undefined>;
 }
 const usbApi = () => (navigator as unknown as { usb: { getDevices(): Promise<UsbDevice[]> } }).usb;
 
-/** Not-granted / vanished devices surface as these DOMException names. */
-const isMissingDevice = (err: unknown) =>
-  err instanceof Error && ["NotFoundError", "SecurityError", "NotAllowedError"].includes(err.name);
+/** A vanished device surfaces as NotFoundError; other failures (e.g. missing driver) keep their message. */
+const isMissingDevice = (err: unknown) => err instanceof Error && err.name === "NotFoundError";
 
 /**
  * Sends the jobs over USB. The device is looked up among the devices the main process
@@ -41,7 +40,10 @@ export async function printJobs(printer: SavedPrinter | null, jobs: Uint8Array[]
     const endpoint = iface?.alternate.endpoints.find((e) => e.direction === "out");
     if (!endpoint) throw new Error("Kein Ausgabe-Endpunkt gefunden");
 
-    for (const job of jobs) await device.transferOut(endpoint.endpointNumber, job);
+    for (const job of jobs) {
+      const result = await device.transferOut(endpoint.endpointNumber, job);
+      if (result?.status && result.status !== "ok") throw new Error(result.status);
+    }
   } catch (err) {
     if (err instanceof PrintError) throw err;
     if (isMissingDevice(err)) throw new PrintError(NOT_FOUND);

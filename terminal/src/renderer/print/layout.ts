@@ -14,7 +14,10 @@ export interface PrintContext {
   printedAt?: string;
 }
 
-export const formatAmount = (x: number): string => x.toFixed(2).replace(".", ",");
+export const formatAmount = (x: number): string => {
+  const s = x.toFixed(2);
+  return (s === "-0.00" ? "0.00" : s).replace(".", ",");
+};
 
 const text = (t: string, align: "left" | "center" | "right" = "left", bold?: boolean): ReceiptLine =>
   bold ? { kind: "text", text: t, align, bold } : { kind: "text", text: t, align };

@@ -5,16 +5,21 @@ import type { ReceiptLine } from "./layout";
 const MARGIN_DOTS = 40;
 
 /**
- * Inserts the margin command right after the ESC @ reset the encoder emits first.
- * The library's own reset() clobbers it, so it is added after encoding.
+ * Inserts the margin command right after the ESC @ reset the encoder emits.
+ * The library's own reset() clobbers it, so it is added after encoding. The library defers the
+ * reset behind pending alignment padding, so ESC @ is searched for rather than assumed at index 0.
  */
 export function wrapPrintData(data: Uint8Array): Uint8Array {
-  if (data[0] !== 0x1b || data[1] !== 0x40) return data;
+  let at = -1;
+  for (let i = 0; i + 1 < data.length; i++) {
+    if (data[i] === 0x1b && data[i + 1] === 0x40) { at = i; break; }
+  }
+  if (at < 0) return data;
   const marginCmd = [0x1d, 0x4c, MARGIN_DOTS & 0xff, (MARGIN_DOTS >> 8) & 0xff];
   const result = new Uint8Array(data.length + marginCmd.length);
-  result.set(data.subarray(0, 2));
-  result.set(marginCmd, 2);
-  result.set(data.subarray(2), 2 + marginCmd.length);
+  result.set(data.subarray(0, at + 2));
+  result.set(marginCmd, at + 2);
+  result.set(data.subarray(at + 2), at + 2 + marginCmd.length);
   return result;
 }
 

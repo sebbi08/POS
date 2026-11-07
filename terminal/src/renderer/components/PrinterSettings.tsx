@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SavedPrinter, TerminalSettings, UsbDeviceChoice } from "../../shared/types";
 import { encodeJob } from "../print/encode";
 import type { ReceiptLine } from "../print/layout";
@@ -35,7 +35,17 @@ function PrinterSettings({ settings, onSave }: Props) {
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [choices, setChoices] = useState<UsbDeviceChoice[] | null>(null);
 
+  const searching = useRef(false);
+
+  /** Answers a pending chooser so requestDevice in main/renderer never hangs. */
+  const cancelSearch = () => {
+    if (!searching.current) return;
+    searching.current = false;
+    void window.terminal.chooseUsb(null);
+  };
+
   const openDialog = () => {
+    setBusy(false);
     setPrinter(settings.printer);
     setPaperWidth(settings.paperWidth);
     setMessage(null);
@@ -46,12 +56,17 @@ function PrinterSettings({ settings, onSave }: Props) {
   // Main sends the device list while a search (navigator.usb.requestDevice) is pending.
   useEffect(() => {
     if (!open) return;
-    return window.terminal.onUsbChoose(setChoices);
+    const unsubscribe = window.terminal.onUsbChoose(setChoices);
+    return () => {
+      unsubscribe();
+      cancelSearch();
+    };
   }, [open]);
 
   const handleSearch = async () => {
     setBusy(true);
     setMessage(null);
+    searching.current = true;
     try {
       const device = await (navigator as unknown as {
         usb: { requestDevice(o: { filters: unknown[] }): Promise<{ vendorId: number; productId: number; productName?: string } | undefined> };
@@ -65,12 +80,14 @@ function PrinterSettings({ settings, onSave }: Props) {
         setMessage({ text: err instanceof Error ? err.message : "Drucker konnte nicht hinzugefügt werden", error: true });
       }
     } finally {
+      searching.current = false;
       setChoices(null);
       setBusy(false);
     }
   };
 
   const answer = (deviceId: string | null) => {
+    searching.current = false;
     setChoices(null);
     void window.terminal.chooseUsb(deviceId);
   };

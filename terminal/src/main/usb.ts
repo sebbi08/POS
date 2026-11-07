@@ -8,18 +8,34 @@ export interface UsbChoice { deviceId: string; productName?: string; vendorId: n
  */
 export class UsbChooser {
   private pending: ((deviceId?: string) => void) | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private dispose: (() => void) | null = null;
 
+  constructor(private readonly timeoutMs = 60_000) {}
+
+  /** `dispose` runs once when this request is settled (answer, cancel, failure or timeout). */
   request(
     devices: USBDevice[],
     send: ((list: UsbChoice[]) => void) | null,
     callback: (deviceId?: string) => void,
+    dispose?: () => void,
   ): void {
     this.settle(undefined);
-    if (!send) { callback(); return; }
+    if (!send) { callback(); dispose?.(); return; }
     this.pending = callback;
-    send(devices.map((d) => ({
-      deviceId: d.deviceId, productName: d.productName, vendorId: d.vendorId, productId: d.productId,
-    })));
+    this.dispose = dispose ?? null;
+    this.timer = setTimeout(() => this.settle(undefined), this.timeoutMs);
+    try {
+      send(devices.map((d) => ({
+        deviceId: d.deviceId, productName: d.productName, vendorId: d.vendorId, productId: d.productId,
+      })));
+    } catch {
+      this.settle(undefined); // destroyed webContents / crashed frame
+    }
+  }
+
+  cancel(): void {
+    this.settle(undefined);
   }
 
   chosen(deviceId: string | null): void {
@@ -28,7 +44,12 @@ export class UsbChooser {
 
   private settle(deviceId: string | undefined): void {
     const cb = this.pending;
+    const dispose = this.dispose;
     this.pending = null;
+    this.dispose = null;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    dispose?.();
     if (!cb) return;
     if (deviceId === undefined) cb(); else cb(deviceId);
   }
@@ -44,10 +65,25 @@ export function registerUsb(ses: Session, getWindow: () => BrowserWindow | null)
   const chooser = new UsbChooser();
   ses.setDevicePermissionHandler((details) => details.deviceType === "usb");
   ses.setPermissionCheckHandler((_wc, permission) => permission === "usb");
+  ses.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === "usb"));
   ses.on("select-usb-device", (event, details, callback) => {
     event.preventDefault();
     const win = getWindow();
-    chooser.request(details.deviceList, win ? (list) => win.webContents.send("usb:choose", list) : null, callback);
+    if (!win || win.isDestroyed()) { chooser.request(details.deviceList, null, callback); return; }
+    // A reload, navigation or closed window leaves the renderer without a way to answer.
+    const wc = win.webContents;
+    const cancel = () => chooser.cancel();
+    const onNavigate = (nav: { isMainFrame: boolean; isSameDocument: boolean }) => {
+      if (nav.isMainFrame && !nav.isSameDocument) chooser.cancel();
+    };
+    wc.once("destroyed", cancel);
+    wc.once("render-process-gone", cancel);
+    wc.on("did-start-navigation", onNavigate);
+    chooser.request(details.deviceList, (list) => wc.send("usb:choose", list), callback, () => {
+      wc.removeListener("destroyed", cancel);
+      wc.removeListener("render-process-gone", cancel);
+      wc.removeListener("did-start-navigation", onNavigate);
+    });
   });
   ipcMain.handle("usb:chosen", (_e, deviceId: string | null) => chooser.chosen(deviceId));
 }

@@ -49,7 +49,23 @@ describe("printJobs", () => {
     expect(dev.close).toHaveBeenCalledTimes(1);
   });
 
-  it("treats a not-granted device as missing", async () => {
+  it("fails when transferOut reports a non-ok status", async () => {
+    const dev = fakeDevice({ transferOut: vi.fn().mockResolvedValue({ status: "stall" }) });
+    mockUsb([dev]);
+    await expect(printJobs(printer, [new Uint8Array([1])])).rejects.toThrow("Drucken fehlgeschlagen: stall");
+    expect(dev.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report a failing claimInterface or security error as missing printer", async () => {
+    const claim = Object.assign(new Error("Unable to claim interface"), { name: "NetworkError" });
+    mockUsb([fakeDevice({ claimInterface: vi.fn().mockRejectedValue(claim) })]);
+    await expect(printJobs(printer, [new Uint8Array([1])])).rejects.toThrow("Drucken fehlgeschlagen: Unable to claim interface");
+    const sec = Object.assign(new Error("blocked"), { name: "SecurityError" });
+    mockUsb([fakeDevice({ open: vi.fn().mockRejectedValue(sec) })]);
+    await expect(printJobs(printer, [new Uint8Array([1])])).rejects.toThrow("Drucken fehlgeschlagen: blocked");
+  });
+
+  it("treats a vanished device as missing", async () => {
     const err = Object.assign(new Error("denied"), { name: "NotFoundError" });
     const dev = fakeDevice({ open: vi.fn().mockRejectedValue(err) });
     mockUsb([dev]);

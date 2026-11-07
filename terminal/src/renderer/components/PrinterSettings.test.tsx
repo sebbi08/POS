@@ -92,6 +92,41 @@ describe("PrinterSettings", () => {
     expect(onSave).toHaveBeenCalledWith({ ...base, printer: null, paperWidth: "58" });
   });
 
+  it("closing while the device list is shown answers null and re-enables Suchen", async () => {
+    requestDevice.mockImplementation(() => new Promise((resolve) => {
+      chooseUsb.mockImplementation(async () => { resolve(undefined); });
+    }));
+    render(<PrinterSettings settings={base} onSave={vi.fn()} />);
+    open();
+    fireEvent.click(screen.getByText("Suchen"));
+    await act(async () => { chooseCb?.([]); });
+    await act(async () => { fireEvent.click(screen.getByText("Schließen")); });
+    expect(chooseUsb).toHaveBeenCalledWith(null);
+    open();
+    expect(screen.getByText("Suchen")).toBeEnabled();
+  });
+
+  it("saving while the device list is shown answers null", async () => {
+    requestDevice.mockImplementation(() => new Promise((resolve) => {
+      chooseUsb.mockImplementation(async () => { resolve(undefined); });
+    }));
+    render(<PrinterSettings settings={base} onSave={vi.fn()} />);
+    open();
+    fireEvent.click(screen.getByText("Suchen"));
+    await act(async () => { chooseCb?.([]); });
+    await act(async () => { fireEvent.click(screen.getByText("Speichern")); });
+    expect(chooseUsb).toHaveBeenCalledWith(null);
+  });
+
+  it("unmounting while searching answers null", async () => {
+    requestDevice.mockImplementation(() => new Promise(() => {}));
+    const { unmount } = render(<PrinterSettings settings={base} onSave={vi.fn()} />);
+    open();
+    fireEvent.click(screen.getByText("Suchen"));
+    unmount();
+    expect(chooseUsb).toHaveBeenCalledWith(null);
+  });
+
   it("disables the test print without a printer", () => {
     render(<PrinterSettings settings={base} onSave={vi.fn()} />);
     open();
