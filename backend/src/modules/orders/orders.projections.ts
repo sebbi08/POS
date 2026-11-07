@@ -17,7 +17,7 @@ export function initOrderProjections(): void {
           totalGross: 0,
           totalVat: {},
           totalNet: 0,
-          createdAt: new Date(),
+          createdAt: event.occurredAt,
         });
         break;
       }
@@ -69,7 +69,7 @@ export function initOrderProjections(): void {
           order.totalGross = data.totalGross as number;
           order.totalVat = data.totalVat as Record<number, number>;
           order.totalNet = data.totalNet as number;
-          order.closedAt = new Date();
+          order.closedAt = event.occurredAt;
         }
         break;
       }

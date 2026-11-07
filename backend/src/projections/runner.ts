@@ -1,10 +1,11 @@
 import {
   replayOrderEvents,
   subscribeToOrderEvents,
+  type StoredEvent,
 } from "../modules/orders/order-eventstore.js";
 
 type EventHandler = (
-  event: { type: string; data: Record<string, unknown> },
+  event: StoredEvent,
   streamName: string,
 ) => void | Promise<void>;
 
@@ -35,7 +36,7 @@ export async function startProjections(): Promise<void> {
   );
   let eventCount = 0;
   const t0 = Date.now();
-  await replayOrderEvents(async (event) => {
+  const lastId = await replayOrderEvents(async (event) => {
     eventCount++;
     const { streamId } = event;
     for (const sub of subscriptions) {
@@ -49,11 +50,11 @@ export async function startProjections(): Promise<void> {
     `[backend:projections]  Replayed ${eventCount} events in ${Date.now() - t0}ms`,
   );
 
-  subscribeToOrderEvents((event) => {
+  await subscribeToOrderEvents(lastId, async (event) => {
     const { streamId } = event;
     for (const sub of subscriptions) {
       if (streamId.startsWith(`${sub.prefix}-`)) {
-        sub.handler(event, streamId);
+        await sub.handler(event, streamId);
       }
     }
   });

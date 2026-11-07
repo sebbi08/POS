@@ -28,7 +28,10 @@ vi.mock("../projections/runner", () => ({
   startProjections: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { appendOrderEvent } from "../modules/orders/order-eventstore.js";
+import {
+  appendOrderEvent,
+  type StoredEvent,
+} from "../modules/orders/order-eventstore.js";
 import { openOrder } from "../modules/orders/orders.commands.js";
 import {
   getOpenOrdersByTerminal,
@@ -53,7 +56,10 @@ describe("Orders Projections", () => {
   it("processes full order lifecycle: open → add → close", () => {
     orders.clear();
     initOrderProjections();
-    const handler = vi.mocked(registerProjection).mock.calls[0][2];
+    const handler = vi.mocked(registerProjection).mock.calls[0][2] as (
+      e: Partial<StoredEvent>,
+      streamName: string,
+    ) => void | Promise<void>;
 
     handler(
       { type: "OrderOpened", data: { id: "o1", terminalId: "t1" } },
@@ -98,7 +104,10 @@ describe("Orders Projections", () => {
   it("OrderCancellationCreated creates cancellation order and links original", () => {
     orders.clear();
     initOrderProjections();
-    const handler = vi.mocked(registerProjection).mock.calls[0][2];
+    const handler = vi.mocked(registerProjection).mock.calls[0][2] as (
+      e: Partial<StoredEvent>,
+      streamName: string,
+    ) => void | Promise<void>;
 
     handler(
       { type: "OrderOpened", data: { id: "o1", terminalId: "t1" } },
@@ -156,10 +165,45 @@ describe("Orders Projections", () => {
     expect(original.cancelledByOrderId).toBe("c1");
   });
 
+  it("OrderOpened sets createdAt and OrderClosed sets closedAt from occurredAt", () => {
+    orders.clear();
+    initOrderProjections();
+    const handler = vi.mocked(registerProjection).mock.calls[0][2] as (
+      e: Partial<StoredEvent>,
+      streamName: string,
+    ) => void | Promise<void>;
+
+    handler(
+      {
+        type: "OrderOpened",
+        data: { id: "o1", terminalId: "t1" },
+        occurredAt: new Date("2026-06-01T20:00:00Z"),
+      },
+      "order-o1",
+    );
+    expect(orders.get("o1")!.createdAt.toISOString()).toBe(
+      "2026-06-01T20:00:00.000Z",
+    );
+    handler(
+      {
+        type: "OrderClosed",
+        data: { orderId: "o1", totalGross: 0, totalVat: {}, totalNet: 0 },
+        occurredAt: new Date("2026-06-01T20:15:00Z"),
+      },
+      "order-o1",
+    );
+    expect(orders.get("o1")!.closedAt?.toISOString()).toBe(
+      "2026-06-01T20:15:00.000Z",
+    );
+  });
+
   it("getOpenOrdersByTerminal filters by terminal and status", () => {
     orders.clear();
     initOrderProjections();
-    const handler = vi.mocked(registerProjection).mock.calls[0][2];
+    const handler = vi.mocked(registerProjection).mock.calls[0][2] as (
+      e: Partial<StoredEvent>,
+      streamName: string,
+    ) => void | Promise<void>;
 
     handler(
       { type: "OrderOpened", data: { id: "o1", terminalId: "bar" } },
