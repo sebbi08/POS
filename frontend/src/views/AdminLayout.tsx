@@ -29,7 +29,7 @@ function AdminLayout() {
     api
       .get<{ version?: string }>("/version")
       .then((r) => setVersion(r?.version ?? ""))
-      .catch(() => {});
+      .catch(() => {}); // version unavailable: it is simply not shown
   }, []);
 
   return (
