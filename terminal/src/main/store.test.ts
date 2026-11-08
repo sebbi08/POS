@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, appendFile, access, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, appendFile, access, writeFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -273,6 +273,8 @@ describe("LocalStore.migrate", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+    await chmod(dir, 0o700);
     await rm(dir, { recursive: true, force: true });
   });
 
@@ -316,6 +318,70 @@ describe("LocalStore.migrate", () => {
         { from: 2, run: async () => { throw new Error("boom"); } },
       ], 3),
     ).rejects.toThrow("boom");
+    expect(await diskFormat()).toBe(2);
+  });
+
+  it("a format stamp that cannot be written is logged and migrate still resolves", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await chmod(dir, 0o500); // read-only: format.json cannot be created
+    const store = new LocalStore(dir);
+    await expect(store.migrate()).resolves.toBeUndefined();
+    expect(await exists(formatFile())).toBe(false);
+    expect(error).toHaveBeenCalledOnce();
+    expect(await store.format()).toBe(1);
+  });
+
+  it("a format bump that cannot be written after a migration step still rejects", async () => {
+    const store = new LocalStore(dir);
+    await expect(
+      store.migrate([{ from: 1, run: async (d) => { await chmod(d, 0o500); } }], 2),
+    ).rejects.toThrow();
+    expect(await exists(formatFile())).toBe(false);
+  });
+
+  it("a populated v0.1.0 data dir (no format.json) is stamped with format 1 and left untouched", async () => {
+    const events = [
+      { seq: 1, orderId: "o1", type: "OrderOpened", data: { id: "o1", terminalId: "t1" }, occurredAt: "2026-10-01T10:00:00.000Z" },
+      { seq: 2, orderId: "o1", type: "OrderClosed", data: { orderId: "o1" }, occurredAt: "2026-10-01T10:01:00.000Z" },
+    ];
+    const settings = {
+      serverUrl: "http://kasse.local:3001", terminalId: "t1", terminalKey: "geheim", changeCalculator: false,
+      printer: null, paperWidth: "80", lastCatalogFetchAt: "2026-10-01T09:00:00.000Z", clockSkewMs: 120,
+    };
+    const files: Record<string, string> = {
+      "events.jsonl": events.map((e) => JSON.stringify(e) + "\n").join(""),
+      "synced.jsonl": JSON.stringify({ orderId: "o1", syncedAt: "2026-10-01T11:00:00.000Z" }) + "\n",
+      "catalog.json": JSON.stringify(catalog, null, 2),
+      "settings.json": JSON.stringify(settings, null, 2),
+    };
+    for (const [name, content] of Object.entries(files)) await writeFile(join(dir, name), content);
+    const before = await Promise.all(Object.keys(files).map((f) => readFile(join(dir, f))));
+
+    const store = new LocalStore(dir);
+    await store.migrate();
+
+    expect(await Promise.all(Object.keys(files).map((f) => readFile(join(dir, f))))).toEqual(before);
+    expect(JSON.parse(await readFile(formatFile(), "utf8"))).toEqual({ format: 1 });
+    const reopened = new LocalStore(dir);
+    expect(await reopened.readEvents()).toEqual(events);
+    expect(await reopened.loadSettings()).toEqual(settings);
+    expect(await reopened.loadCatalog()).toEqual(catalog);
+    expect(await reopened.readSynced()).toEqual({ o1: "2026-10-01T11:00:00.000Z" });
+  });
+
+  it.each([
+    ["invalid JSON", "{kaputt"],
+    ["a non-numeric format", JSON.stringify({ format: "x" })],
+    ["format 0", JSON.stringify({ format: 0 })],
+  ])("a format.json with %s makes migrate throw", async (_name, content) => {
+    await writeFile(formatFile(), content);
+    await expect(new LocalStore(dir).migrate()).rejects.toThrow(/format\.json/);
+    expect(await readFile(formatFile(), "utf8")).toBe(content);
+  });
+
+  it("a missing migration step throws and leaves format.json at the last completed step", async () => {
+    const store = new LocalStore(dir);
+    await expect(store.migrate([{ from: 1, run: async () => {} }], 3)).rejects.toThrow("no migration from format 2");
     expect(await diskFormat()).toBe(2);
   });
 });

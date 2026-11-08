@@ -4,14 +4,10 @@ import type { CatalogSnapshot } from "../shared/contract";
 import type { NewEvent, TerminalSettings } from "../shared/types";
 import { resolveDataDir } from "./data-dir";
 import { isAllowedNavigation } from "./navigation";
-import { FormatTooNewError } from "./migrations";
+import { prepareStore } from "./prepare-store";
 import { LocalStore } from "./store";
 import { createUpdateNotice, startUpdater } from "./updater";
 import { registerUsb } from "./usb";
-
-const RETENTION_DAYS = 30;
-
-const STORE_PREPARE_ERROR = "Lokale Daten konnten nicht vorbereitet werden – bitte App neu starten";
 
 function registerStoreIpc(store: LocalStore): void {
   ipcMain.handle("store:appendEvents", (_e, events: NewEvent[]) => store.appendEvents(events));
@@ -62,26 +58,7 @@ function createWindow(): void {
 
 async function start(dataDir: string): Promise<void> {
   const store = new LocalStore(dataDir);
-  let storeError: string | null = null;
-  try {
-    await store.migrate();
-  } catch (err) {
-    // Nothing may write to a store of a newer format or to a half-migrated one: no compact, no store IPC.
-    if (err instanceof FormatTooNewError) {
-      storeError = err.message;
-    } else {
-      console.error("migrate failed", err);
-      storeError = STORE_PREPARE_ERROR;
-    }
-  }
-  if (storeError === null) {
-    try {
-      await store.compact(RETENTION_DAYS, new Date());
-    } catch (err) {
-      // Never keep the till from starting because of housekeeping; the error resurfaces on read.
-      console.error("compact failed", err);
-    }
-  }
+  const storeError = await prepareStore(store, new Date());
   const updateNotice = createUpdateNotice((version) => mainWindow?.webContents.send("update:ready", version));
   if (storeError === null) registerStoreIpc(store);
   registerAppIpc(updateNotice.current, storeError);

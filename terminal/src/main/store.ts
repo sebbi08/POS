@@ -107,7 +107,8 @@ export class LocalStore {
   /**
    * Brings the data directory to format `current`. Throws FormatTooNewError (changing nothing)
    * if it is newer. Each step is committed by writing format.json, so a failed migration
-   * leaves the format at the last completed step.
+   * leaves the format at the last completed step. If no step runs, a failure to write the
+   * format.json stamp is only logged.
    */
   migrate(migrations: Migration[] = MIGRATIONS, current: number = CURRENT_FORMAT): Promise<void> {
     return this.serialized(async () => {
@@ -119,7 +120,14 @@ export class LocalStore {
         await migration.run(this.dir);
         await this.writeJson(FORMAT, { format: from + 1 });
       }
-      if (!(await readJson<unknown>(this.file(FORMAT)))) await this.writeJson(FORMAT, { format: current });
+      if (await readJson<unknown>(this.file(FORMAT))) return;
+      // Reached only when no step ran: the data is already in the current format and a missing
+      // format.json counts as format 1, so a failed stamp must not keep the till from starting.
+      try {
+        await this.writeJson(FORMAT, { format: current });
+      } catch (err) {
+        console.error("format.json could not be written", err);
+      }
     });
   }
 
