@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 interface Props {
   onSubmit: (pin: string) => void;
@@ -9,6 +9,14 @@ interface Props {
 function PinDialog({ onSubmit, onCancel }: Props) {
   const [pin, setPin] = useState("");
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onCancel]);
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (pin) onSubmit(pin);
@@ -18,6 +26,7 @@ function PinDialog({ onSubmit, onCancel }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <form
         role="dialog"
+        aria-modal="true"
         aria-labelledby="pin-title"
         onSubmit={submit}
         className="bg-gray-800 rounded-xl p-6 w-96 shadow-2xl"
