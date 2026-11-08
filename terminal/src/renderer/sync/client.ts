@@ -3,7 +3,7 @@ import type { TerminalSettings } from "../../shared/types";
 import { versionMismatchText } from "./version";
 
 export const CLOCK_WARN_MS = 5 * 60 * 1000;
-const TIMEOUT_MS = 15_000;
+export const TIMEOUT_MS = 15_000;
 const BATCH_SIZE = 50;
 
 export interface SyncAuth { pin: string; appVersion: string }

@@ -1,4 +1,4 @@
-import { SyncError, normalizeServerUrl, request } from "./client";
+import { SyncError, TIMEOUT_MS, normalizeServerUrl } from "./client";
 
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
 
@@ -23,9 +23,27 @@ export function versionMismatchText(appVersion: string, serverVersion: string): 
   return "Versionen passen nicht zusammen";
 }
 
-/** Asks the public /api/version endpoint; throws SyncError on mismatch or when unreachable. */
+/**
+ * Asks the public /api/version endpoint; throws SyncError on mismatch or when unreachable.
+ * Maps statuses itself: a server older than 0.2.0 has no /api/version and answers 404.
+ */
 export async function checkServerVersion(serverUrl: string, appVersion: string): Promise<void> {
-  const { body } = await request<{ version?: unknown }>(`${normalizeServerUrl(serverUrl)}/api/version`, {});
+  let res: Response;
+  try {
+    res = await fetch(`${normalizeServerUrl(serverUrl)}/api/version`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch {
+    throw new SyncError("Server nicht erreichbar");
+  }
+  if (res.status === 404) {
+    throw new SyncError(`Server ist veraltet (Server ohne Versionsangabe, Kasse ${appVersion}) – bitte zuerst den Server aktualisieren`);
+  }
+  if (!res.ok) throw new SyncError(`Serverfehler (${res.status})`);
+  let body: { version?: unknown } | null;
+  try {
+    body = (await res.json()) as { version?: unknown } | null;
+  } catch {
+    throw new SyncError("Versionen passen nicht zusammen");
+  }
   const serverVersion = typeof body?.version === "string" ? body.version : null;
   if (serverVersion === null) throw new SyncError("Versionen passen nicht zusammen");
   const text = versionMismatchText(appVersion, serverVersion);

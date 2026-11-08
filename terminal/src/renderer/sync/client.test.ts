@@ -126,6 +126,10 @@ describe("PIN and version", () => {
     fetchMock.mockResolvedValueOnce(new Response("", { status: 409 }));
     await expect(fetchCatalog(settings, auth)).rejects.toThrow(/^Versionen passen nicht zusammen$/);
   });
+  it("409 with a valid JSON body but no serverVersion maps to the generic version text", async () => {
+    fetchMock.mockResolvedValueOnce(json(409, { error: "Versionen passen nicht zusammen" }));
+    await expect(fetchCatalog(settings, auth)).rejects.toThrow(/^Versionen passen nicht zusammen$/);
+  });
   it("uploadAll sends the same PIN in every batch and keeps partial on 401 in batch 2", async () => {
     fetchMock
       .mockResolvedValueOnce(json(200, { serverTime: new Date().toISOString(), accepted: ["o0"], rejected: [] }))

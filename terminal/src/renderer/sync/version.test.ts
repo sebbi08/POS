@@ -50,10 +50,31 @@ describe("checkServerVersion", () => {
     expect(e).toBeInstanceOf(SyncError);
     expect(e.message).toBe("Server nicht erreichbar");
   });
+  it("timeout maps to Server nicht erreichbar and the request carries a timeout signal", async () => {
+    fetchMock.mockRejectedValue(new DOMException("timed out", "TimeoutError"));
+    await expect(checkServerVersion("srv.de", "0.2.0")).rejects.toThrow(/^Server nicht erreichbar$/);
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
   it("non-2xx and missing version", async () => {
     fetchMock.mockResolvedValueOnce(json(500, {}));
     await expect(checkServerVersion("srv.de", "0.2.0")).rejects.toThrow("Serverfehler (500)");
     fetchMock.mockResolvedValueOnce(json(200, {}));
     await expect(checkServerVersion("srv.de", "0.2.0")).rejects.toThrow("Versionen passen nicht zusammen");
+  });
+  it("404 (server older than 0.2.0, no /api/version) says the server is outdated", async () => {
+    fetchMock.mockResolvedValue(new Response("Cannot GET /api/version", { status: 404 }));
+    await expect(checkServerVersion("srv.de", "0.2.0")).rejects.toThrow(
+      /^Server ist veraltet \(Server ohne Versionsangabe, Kasse 0\.2\.0\) – bitte zuerst den Server aktualisieren$/,
+    );
+  });
+  it("200 with a non-JSON body is a mismatch", async () => {
+    fetchMock.mockResolvedValue(new Response("<html>proxy</html>", { status: 200 }));
+    await expect(checkServerVersion("srv.de", "0.2.0")).rejects.toThrow(/^Versionen passen nicht zusammen$/);
+  });
+  it("200 with an invalid version is a mismatch", async () => {
+    for (const body of [{ version: 2 }, { version: "0.2" }, null]) {
+      fetchMock.mockResolvedValueOnce(json(200, body));
+      await expect(checkServerVersion("srv.de", "0.2.0")).rejects.toThrow(/^Versionen passen nicht zusammen$/);
+    }
   });
 });
