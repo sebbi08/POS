@@ -85,12 +85,23 @@ async function launch(dataDir: string): Promise<{ app: ElectronApplication; page
   return { app, page };
 }
 
+const pinDialog = (page: Page) => page.getByRole("dialog", { name: "Admin-PIN" });
+
+/** Answers the „Admin-PIN“ dialog every sync asks for with the e2e server's PIN. */
+async function enterPin(page: Page): Promise<void> {
+  const dialog = pinDialog(page);
+  await dialog.getByLabel("Admin-PIN").fill("0000");
+  await dialog.getByRole("button", { name: "OK" }).click();
+  await expect(dialog).toBeHidden();
+}
+
 async function setUp(page: Page, terminal: TestTerminal): Promise<void> {
   await page.getByLabel("Serveradresse").fill(SERVER_URL);
   await page.getByRole("button", { name: "Terminals laden" }).click();
   await page.getByRole("button", { name: terminal.name, exact: true }).click();
   await page.getByLabel("Terminal-Schlüssel").fill(terminal.key);
   await page.getByRole("button", { name: "Einrichten & Artikel abholen" }).click();
+  await enterPin(page);
   await expect(page.getByRole("heading", { name: terminal.name })).toBeVisible();
   await expect(page.getByRole("status")).toHaveText(/Artikel aktualisiert/);
 }
@@ -106,8 +117,10 @@ async function sell(page: Page, items: string[]): Promise<void> {
 
 const pending = (page: Page, n: number) => page.getByText(`${n} Buchung(en) nicht übertragen`);
 
+/** With nothing pending (`transferred` 0) the upload asks for no PIN. */
 async function upload(page: Page, transferred: number): Promise<void> {
   await page.getByRole("button", { name: "Buchungen übertragen" }).click();
+  if (transferred > 0) await enterPin(page);
   await expect(page.getByRole("status")).toHaveText(new RegExp(`^${transferred} Buchung\\(en\\) übertragen`));
 }
 
@@ -221,7 +234,9 @@ test.describe("Terminal-App gegen echten Server", () => {
     await expect(page.getByRole("heading", { name: terminal.name })).toBeVisible();
 
     await page.getByRole("button", { name: "Artikel abholen" }).click();
+    // The version check fails first, so no PIN is asked for.
     await expect(page.getByRole("alert")).toHaveText(/Server nicht erreichbar/);
+    await expect(pinDialog(page)).toHaveCount(0);
     await expect(itemButton(page, "Bier")).toBeVisible();
     await expect(itemButton(page, "Wasser")).toBeVisible();
   });

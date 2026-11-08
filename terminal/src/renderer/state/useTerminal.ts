@@ -7,7 +7,8 @@ import {
 } from "../domain/orders";
 import { cancellableOrders, hasPendingUploads, pendingUploads, unsyncedCount } from "../domain/sync-selection";
 import { printJobs } from "../print/usb";
-import { fetchCatalog as requestCatalog, SyncError, uploadAll } from "../sync/client";
+import { fetchCatalog as requestCatalog, SyncError, uploadAll, type SyncAuth } from "../sync/client";
+import { checkServerVersion } from "../sync/version";
 import {
   clockWarningText, SAVE_FAILED, SAVE_SUSPECT, syncErrorText, TERMINAL_LOCKED, uploadMessage, type Message,
 } from "./messages";
@@ -21,6 +22,9 @@ interface Data {
 }
 
 type SyncKind = "catalog" | "upload";
+
+/** An open „Admin-PIN“ prompt; `resolve(null)` means cancelled. */
+export interface PinPrompt { resolve: (pin: string | null) => void }
 
 const EMPTY: Data = { settings: null, catalog: null, events: [], synced: {} };
 const now = () => new Date().toISOString();
@@ -40,6 +44,10 @@ export function useTerminal() {
   const [pending, setPending] = useState(0);
   const [sync, setSync] = useState<SyncKind | null>(null);
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+  const [pinPrompt, setPinPrompt] = useState<PinPrompt | null>(null);
+  /** Read once at startup; "" when unreadable, which every server then refuses as a mismatch. */
+  const appVersion = useRef<Promise<string> | null>(null);
+  const getAppVersion = () => (appVersion.current ??= bridge().appVersion().catch(() => ""));
   const queue = useRef<Promise<void>>(Promise.resolve());
   const syncingRef = useRef(false);
   /** Orders in an upload that is still waiting for the server; they must not be cancelled meanwhile. */
@@ -75,6 +83,7 @@ export function useTerminal() {
   }, [commit]);
 
   useEffect(() => bridge().onUpdateReady(setUpdateVersion), []);
+  useEffect(() => { void getAppVersion(); }, []);
 
   const enqueue = useCallback((task: () => Promise<void>): Promise<void> => {
     setPending((n) => n + 1);
@@ -150,6 +159,27 @@ export function useTerminal() {
   const endSync = () => {
     syncingRef.current = false;
     setSync(null);
+  };
+
+  /** Opens the PIN dialog; the PIN is only handed to the caller, never kept in state. */
+  const requestPin = () => new Promise<string | null>((resolve) => {
+    setPinPrompt({ resolve: (pin) => { setPinPrompt(null); resolve(pin); } });
+  });
+
+  /**
+   * Before every sync: the server must run the same version, then the admin PIN is asked for.
+   * Shows the error and returns null on a mismatch; returns null silently when cancelled.
+   */
+  const authorize = async (serverUrl: string): Promise<SyncAuth | null> => {
+    const version = await getAppVersion();
+    try {
+      await checkServerVersion(serverUrl, version);
+    } catch (err) {
+      setMessage({ kind: "error", text: syncErrorText(err) });
+      return null;
+    }
+    const pin = await requestPin();
+    return pin === null ? null : { pin, appVersion: version };
   };
 
   const addItem = (itemId: string) => enqueue(async () => {
@@ -231,9 +261,11 @@ export function useTerminal() {
     const credentials = setup ?? current.settings;
     if (!credentials || !beginSync("catalog")) return false;
     try {
+      const auth = await authorize(credentials.serverUrl);
+      if (!auth) return false;
       let result: Awaited<ReturnType<typeof requestCatalog>>;
       try {
-        result = await requestCatalog(credentials);
+        result = await requestCatalog(credentials, auth);
       } catch (err) {
         setMessage({ kind: "error", text: syncErrorText(err) });
         return false;
@@ -273,17 +305,25 @@ export function useTerminal() {
   };
 
   const upload = async (): Promise<void> => {
-    const { settings, events, synced } = dataRef.current;
+    const { settings } = dataRef.current;
     if (!settings || !beginSync("upload")) return;
+    const pendingNow = () => pendingUploads(dataRef.current.events, currentOrders(), dataRef.current.synced);
     try {
-      const uploads = pendingUploads(events, currentOrders(), synced);
+      if (pendingNow().length === 0) {
+        setMessage(uploadMessage([], [], null));
+        return;
+      }
+      const auth = await authorize(settings.serverUrl);
+      if (!auth) return;
+      // Bookings may have been closed while the PIN dialog was open: send what is pending now.
+      const uploads = pendingNow();
       for (const u of uploads) uploading.current.add(u.orderId);
       let accepted: string[] = [];
       let rejected: { orderId: string; error: string }[] = [];
       let clockSkewMs: number | null = null;
       let failure: string | null = null;
       try {
-        ({ accepted, rejected, clockSkewMs } = await uploadAll(settings, uploads));
+        ({ accepted, rejected, clockSkewMs } = await uploadAll(settings, uploads, auth));
       } catch (err) {
         failure = syncErrorText(err);
         if (err instanceof SyncError && err.partial) ({ accepted, rejected } = err.partial);
@@ -329,6 +369,7 @@ export function useTerminal() {
     uploading: sync === "upload",
     message,
     updateVersion,
+    pinPrompt,
     actions: {
       addItem, changeQty, removeLine, discard, checkout, cancel, reprintLast,
       fetchCatalog, upload, saveSettings, dismissMessage,

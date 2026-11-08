@@ -4,6 +4,7 @@ import CheckoutDialog from "./components/CheckoutDialog";
 import ItemGrid from "./components/ItemGrid";
 import MessageBar from "./components/MessageBar";
 import OrderPanel from "./components/OrderPanel";
+import PinDialog from "./components/PinDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import SetupWizard from "./components/SetupWizard";
 import StatusBar from "./components/StatusBar";
@@ -18,6 +19,10 @@ export default function App() {
   const [dialog, setDialog] = useState<Dialog>(null);
 
   const messageBar = <MessageBar message={t.message} onDismiss={actions.dismissMessage} />;
+  const { pinPrompt } = t;
+  const pinDialog = pinPrompt && (
+    <PinDialog onSubmit={(pin) => pinPrompt.resolve(pin)} onCancel={() => pinPrompt.resolve(null)} />
+  );
 
   if (!t.ready) {
     return (
@@ -44,6 +49,7 @@ export default function App() {
           }}
           onCancel={canReturn ? () => setResetup(false) : undefined}
         />
+        {pinDialog}
       </div>
     );
   }
@@ -116,6 +122,7 @@ export default function App() {
           onClose={() => setDialog(null)}
         />
       )}
+      {pinDialog}
     </div>
   );
 }

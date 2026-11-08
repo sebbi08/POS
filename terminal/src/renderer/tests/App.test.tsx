@@ -17,10 +17,15 @@ vi.mock("../sync/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../sync/client")>();
   return { ...actual, listTerminals: vi.fn(), fetchCatalog: vi.fn(), uploadAll: vi.fn() };
 });
+vi.mock("../sync/version", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../sync/version")>();
+  return { ...actual, checkServerVersion: vi.fn(async () => {}) };
+});
 
 import { PRINT_TIMEOUT_MS, PrintError, printJobs } from "../print/usb";
 import { layoutJobs } from "../print/layout";
 import { fetchCatalog, listTerminals, SyncError, uploadAll } from "../sync/client";
+import { checkServerVersion } from "../sync/version";
 
 const SALE_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const SALE_B = "bbbbbbbb-0000-4000-8000-000000000002";
@@ -47,6 +52,15 @@ function setup(init: Parameters<typeof installFakeBridge>[0]) {
 const orderPanel = () => screen.getByRole("region", { name: "Bestellung" });
 const appendedTypes = () => fake.bridge.appendEvents.mock.calls.flatMap(([evs]) => evs.map((e) => e.type));
 const click = (name: string | RegExp) => fireEvent.click(screen.getByRole("button", { name }));
+const APP_VERSION = "0.2.0";
+const AUTH = { pin: "0000", appVersion: APP_VERSION };
+
+/** Waits for the „Admin-PIN“ dialog, types the PIN and confirms with OK. */
+async function enterPin(pin = "0000") {
+  const dialog = await screen.findByRole("dialog", { name: "Admin-PIN" });
+  fireEvent.change(within(dialog).getByLabelText("Admin-PIN"), { target: { value: pin } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -75,13 +89,15 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Grill" }));
     fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "geheim" } });
     click("Einrichten & Artikel abholen");
+    await enterPin();
 
     expect(await screen.findByRole("button", { name: /Bier/ })).toBeInTheDocument();
     expect(listTerminals).toHaveBeenCalledWith("https://kasse.example");
+    expect(checkServerVersion).toHaveBeenCalledWith("https://kasse.example", APP_VERSION);
     expect(fetchCatalog).toHaveBeenCalledWith({
       serverUrl: "https://kasse.example", terminalId: "t2", terminalKey: "geheim",
       changeCalculator: false, printer: null, paperWidth: "80", lastCatalogFetchAt: null, clockSkewMs: null,
-    });
+    }, AUTH);
     expect(fake.log).toEqual(["saveCatalog", "saveSettings"]);
     expect(fake.state.settings).toMatchObject({ serverUrl: "https://kasse.example", terminalId: "t2", clockSkewMs: 1000 });
     expect(fake.state.settings?.lastCatalogFetchAt).toEqual(expect.any(String));
@@ -96,6 +112,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Theke 1" }));
     fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "falsch" } });
     click("Einrichten & Artikel abholen");
+    await enterPin();
     expect(await screen.findByText("Terminal-Schlüssel ungültig – bitte Terminal neu einrichten")).toBeInTheDocument();
     expect(fake.bridge.saveCatalog).not.toHaveBeenCalled();
     expect(fake.bridge.saveSettings).not.toHaveBeenCalled();
@@ -204,6 +221,7 @@ describe("App", () => {
     setup({ settings, catalog });
     await screen.findByRole("button", { name: /Bier/ });
     click("Artikel abholen");
+    await enterPin();
     expect(await screen.findByText("Server nicht erreichbar")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Bier/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Bratwurst/ })).toBeInTheDocument();
@@ -217,6 +235,7 @@ describe("App", () => {
     setup({ settings, catalog });
     await screen.findByRole("button", { name: /Bier/ });
     click("Artikel abholen");
+    await enterPin();
     expect(await screen.findByText("Artikel aktualisiert")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Cola/ })).toBeInTheDocument();
     expect(fake.log).toEqual(["saveCatalog", "saveSettings"]);
@@ -297,10 +316,12 @@ describe("App", () => {
     setup({ settings, catalog, events: [...saleEvents(SALE_A), ...openOrderEvents] });
     expect(await screen.findByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
     click("Buchungen übertragen");
+    await enterPin();
     expect(await screen.findByText("1 Buchung(en) übertragen")).toBeInTheDocument();
     expect(screen.getByText("0 Buchung(en) nicht übertragen")).toBeInTheDocument();
-    const [s, uploads] = vi.mocked(uploadAll).mock.calls[0];
+    const [s, uploads, auth] = vi.mocked(uploadAll).mock.calls[0];
     expect(s).toEqual(settings);
+    expect(auth).toEqual(AUTH);
     expect(uploads.map((u) => u.orderId)).toEqual([SALE_A]); // the open order stays local
     expect(uploads[0].events.map((e) => e.type)).toEqual(["OrderOpened", "ItemAdded", "FinalReceiptPrinted", "OrderClosed"]);
     expect(fake.bridge.markSynced).toHaveBeenCalledWith([SALE_A]);
@@ -314,6 +335,7 @@ describe("App", () => {
     setup({ settings: { ...settings, clockSkewMs: 7 * 60_000 }, catalog, events: [...saleEvents(SALE_A), ...saleEvents(SALE_B)] });
     expect(await screen.findByText("Die Uhr dieses Rechners weicht um 7 Minuten von der Serverzeit ab. Bitte Uhrzeit prüfen.")).toBeInTheDocument();
     click("Buchungen übertragen");
+    await enterPin();
     expect(await screen.findByText("1 Buchung(en) übertragen, 1 abgelehnt: Ungültige Buchung")).toBeInTheDocument();
     expect(screen.getByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
     expect(fake.state.settings?.clockSkewMs).toBe(0);
@@ -325,6 +347,7 @@ describe("App", () => {
     setup({ settings, catalog, events: [...saleEvents(SALE_A), ...saleEvents(SALE_B)] });
     expect(await screen.findByText("2 Buchung(en) nicht übertragen")).toBeInTheDocument();
     click("Buchungen übertragen");
+    await enterPin();
     expect(await screen.findByText("Server nicht erreichbar – 1 Buchung(en) übertragen")).toBeInTheDocument();
     expect(fake.bridge.markSynced).toHaveBeenCalledWith([SALE_A]);
     expect(screen.getByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
@@ -336,6 +359,7 @@ describe("App", () => {
     setup({ settings, catalog, events: saleEvents(SALE_A) });
     await screen.findByText("1 Buchung(en) nicht übertragen");
     click("Buchungen übertragen");
+    await enterPin();
     await waitFor(() => expect(uploadAll).toHaveBeenCalled());
 
     click(/Bier/);
@@ -417,6 +441,7 @@ describe("App", () => {
     setup({ settings, catalog, events: saleEvents(SALE_A) });
     expect(await screen.findByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
     click("Buchungen übertragen");
+    await enterPin();
     expect(await screen.findByText("Terminal-Schlüssel ungültig – bitte Terminal neu einrichten")).toBeInTheDocument();
 
     click("Einstellungen");
@@ -432,15 +457,17 @@ describe("App", () => {
 
     fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "key-2" } });
     click("Einrichten & Artikel abholen");
+    await enterPin();
     expect(await screen.findByRole("button", { name: /Bier/ })).toBeInTheDocument();
     expect(fetchCatalog).toHaveBeenCalledWith(expect.objectContaining({
       serverUrl: "https://kasse2.example", terminalId: "t1", terminalKey: "key-2",
-    }));
+    }), AUTH);
 
     vi.mocked(uploadAll).mockImplementation(async (_s, uploads) => ({
       accepted: uploads.map((u) => u.orderId), rejected: [], clockSkewMs: null,
     }));
     click("Buchungen übertragen");
+    await enterPin();
     expect(await screen.findByText("1 Buchung(en) übertragen")).toBeInTheDocument();
     expect(screen.getByText("0 Buchung(en) nicht übertragen")).toBeInTheDocument();
     expect(vi.mocked(uploadAll).mock.calls.at(-1)![0]).toMatchObject({
@@ -518,8 +545,9 @@ describe("App", () => {
 
   it("re-setup is blocked while a sync is running", async () => {
     vi.mocked(uploadAll).mockImplementation(() => new Promise(() => {}));
-    setup({ settings, catalog });
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
     fireEvent.click(await screen.findByRole("button", { name: "Buchungen übertragen" }));
+    await enterPin();
     await waitFor(() => expect(uploadAll).toHaveBeenCalled());
     click("Einstellungen");
     expect(screen.getByRole("button", { name: "Terminal neu einrichten" })).toBeDisabled();
@@ -537,6 +565,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Grill" }));
     fake.bridge.saveSettings.mockRejectedValueOnce(new Error("EIO"));
     click("Einrichten & Artikel abholen");
+    await enterPin();
     expect(await screen.findByText("Speichern fehlgeschlagen – bitte erneut versuchen")).toBeInTheDocument();
     expect(fake.bridge.saveCatalog.mock.calls.map(([c]) => c.terminal.name)).toEqual(["Grill", "Theke 1"]);
     expect(fake.state.catalog).toEqual(catalog);
@@ -564,6 +593,7 @@ describe("App", () => {
       releaseCatalog = () => { void save(c).then(resolve); };
     }));
     fireEvent.click(await screen.findByRole("button", { name: "Artikel abholen" }));
+    await enterPin();
     await waitFor(() => expect(fake.bridge.saveCatalog).toHaveBeenCalled());
     click("Einstellungen");
     fireEvent.click(screen.getByLabelText("Rückgeldrechner anzeigen"));
@@ -607,6 +637,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Storno" }));
     fireEvent.click(screen.getByRole("button", { name: /#aaaaaaaa/ }));
     click("Buchungen übertragen"); // reachable only in this test; the dialog covers it on screen
+    await enterPin();
     await waitFor(() => expect(uploadAll).toHaveBeenCalled());
     click("Ja, stornieren");
     expect(await screen.findByText("Buchung kann nicht mehr storniert werden")).toBeInTheDocument();
@@ -618,6 +649,7 @@ describe("App", () => {
     vi.mocked(fetchCatalog).mockImplementation(() => new Promise(() => {}));
     setup({ settings, catalog, events: saleEvents(SALE_A) });
     fireEvent.click(await screen.findByRole("button", { name: "Artikel abholen" }));
+    await enterPin();
     await waitFor(() => expect(fetchCatalog).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: "Buchungen übertragen" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Storno" })).toBeEnabled();
@@ -637,5 +669,168 @@ describe("App", () => {
     expect(fake.updateListeners.size).toBe(1);
     unmount();
     expect(fake.updateListeners.size).toBe(0);
+  });
+});
+
+describe("Admin-PIN and version check", () => {
+  it("Artikel abholen asks for PIN and sends it", async () => {
+    vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 0 });
+    setup({ settings, catalog });
+    await screen.findByRole("button", { name: /Bier/ });
+    click("Artikel abholen");
+    const dialog = await screen.findByRole("dialog", { name: "Admin-PIN" });
+    const input = within(dialog).getByLabelText("Admin-PIN");
+    expect(input).toHaveAttribute("type", "password");
+    expect(input).toHaveAttribute("inputmode", "numeric");
+    expect(within(dialog).getByRole("button", { name: "OK" })).toBeDisabled();
+    expect(fetchCatalog).not.toHaveBeenCalled();
+    await enterPin("1234");
+    expect(await screen.findByText("Artikel aktualisiert")).toBeInTheDocument();
+    expect(checkServerVersion).toHaveBeenCalledWith(settings.serverUrl, APP_VERSION);
+    expect(fetchCatalog).toHaveBeenCalledWith(settings, { pin: "1234", appVersion: APP_VERSION });
+    expect(screen.queryByRole("dialog", { name: "Admin-PIN" })).not.toBeInTheDocument();
+  });
+
+  it("Enter in the PIN field submits", async () => {
+    vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 0 });
+    setup({ settings, catalog });
+    await screen.findByRole("button", { name: /Bier/ });
+    click("Artikel abholen");
+    const input = within(await screen.findByRole("dialog", { name: "Admin-PIN" })).getByLabelText("Admin-PIN");
+    fireEvent.change(input, { target: { value: "4321" } });
+    fireEvent.submit(input);
+    await waitFor(() => expect(fetchCatalog).toHaveBeenCalledWith(settings, { pin: "4321", appVersion: APP_VERSION }));
+  });
+
+  it("version mismatch shows message and no PIN dialog", async () => {
+    const text = "Server ist veraltet (Server 0.1.0, Kasse 0.2.0) – bitte zuerst den Server aktualisieren";
+    vi.mocked(checkServerVersion).mockRejectedValueOnce(new SyncError(text));
+    setup({ settings, catalog });
+    await screen.findByRole("button", { name: /Bier/ });
+    click("Artikel abholen");
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Admin-PIN" })).not.toBeInTheDocument();
+    expect(fetchCatalog).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Artikel abholen" })).toBeEnabled();
+  });
+
+  it("without a readable app version the sync is refused as a mismatch", async () => {
+    fake = installFakeBridge({ settings, catalog });
+    fake.bridge.appVersion.mockRejectedValue(new Error("ipc"));
+    vi.mocked(checkServerVersion).mockImplementationOnce(async (_url, version) => {
+      if (version === "") throw new SyncError("Versionen passen nicht zusammen");
+    });
+    render(<App />);
+    await screen.findByRole("button", { name: /Bier/ });
+    click("Artikel abholen");
+    expect(await screen.findByText("Versionen passen nicht zusammen")).toBeInTheDocument();
+    expect(checkServerVersion).toHaveBeenCalledWith(settings.serverUrl, "");
+    expect(fetchCatalog).not.toHaveBeenCalled();
+  });
+
+  it("cancel in PIN dialog aborts silently", async () => {
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    await screen.findByRole("button", { name: /Bier/ });
+    click("Artikel abholen");
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Admin-PIN" })).getByRole("button", { name: "Abbrechen" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Admin-PIN" })).not.toBeInTheDocument());
+    expect(fetchCatalog).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    // The sync guard is released again.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Artikel abholen" })).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Buchungen übertragen" })).toBeEnabled();
+  });
+
+  it("the PIN dialog keeps the sync guard: the other sync stays disabled", async () => {
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    await screen.findByRole("button", { name: /Bier/ });
+    click("Artikel abholen");
+    await screen.findByRole("dialog", { name: "Admin-PIN" });
+    expect(screen.getByRole("button", { name: "Buchungen übertragen" })).toBeDisabled();
+  });
+
+  it("wrong PIN on upload shows Admin-PIN falsch, nothing marked synced", async () => {
+    vi.mocked(uploadAll).mockRejectedValue(new SyncError("Admin-PIN falsch", { accepted: [], rejected: [] }));
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    expect(await screen.findByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    click("Buchungen übertragen");
+    await enterPin("9999");
+    expect(await screen.findByText("Admin-PIN falsch")).toBeInTheDocument();
+    expect(uploadAll).toHaveBeenCalledWith(settings, expect.any(Array), { pin: "9999", appVersion: APP_VERSION });
+    expect(fake.bridge.markSynced).not.toHaveBeenCalled();
+    expect(screen.getByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
+  });
+
+  it("upload with nothing pending needs no PIN", async () => {
+    setup({ settings, catalog, events: saleEvents(SALE_A), synced: { [SALE_A]: T0 } });
+    expect(await screen.findByText("0 Buchung(en) nicht übertragen")).toBeInTheDocument();
+    click("Buchungen übertragen");
+    expect(await screen.findByText("0 Buchung(en) übertragen")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Admin-PIN" })).not.toBeInTheDocument();
+    expect(checkServerVersion).not.toHaveBeenCalled();
+    expect(uploadAll).not.toHaveBeenCalled();
+  });
+
+  it("setup: wrong PIN saves nothing and wizard stays", async () => {
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }]);
+    vi.mocked(fetchCatalog).mockRejectedValue(new SyncError("Admin-PIN falsch"));
+    setup({});
+    fireEvent.change(await screen.findByLabelText("Serveradresse"), { target: { value: "kasse.example" } });
+    click("Terminals laden");
+    fireEvent.click(await screen.findByRole("button", { name: "Theke 1" }));
+    fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "geheim" } });
+    click("Einrichten & Artikel abholen");
+    await enterPin("1111");
+    expect(await screen.findByText("Admin-PIN falsch")).toBeInTheDocument();
+    expect(checkServerVersion).toHaveBeenCalledWith("https://kasse.example", APP_VERSION);
+    expect(fake.bridge.saveCatalog).not.toHaveBeenCalled();
+    expect(fake.bridge.saveSettings).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Serveradresse")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Einrichten & Artikel abholen" })).toBeEnabled());
+  });
+
+  it("setup: cancel in PIN dialog saves nothing and wizard stays", async () => {
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }]);
+    setup({});
+    fireEvent.change(await screen.findByLabelText("Serveradresse"), { target: { value: "kasse.example" } });
+    click("Terminals laden");
+    fireEvent.click(await screen.findByRole("button", { name: "Theke 1" }));
+    fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "geheim" } });
+    click("Einrichten & Artikel abholen");
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Admin-PIN" })).getByRole("button", { name: "Abbrechen" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Einrichten & Artikel abholen" })).toBeEnabled());
+    expect(fetchCatalog).not.toHaveBeenCalled();
+    expect(fake.bridge.saveSettings).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("PIN is not persisted", async () => {
+    const PIN = "987654";
+    const consoleSpies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m));
+    vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 1000 });
+    vi.mocked(uploadAll).mockImplementation(async (_s, uploads) => ({
+      accepted: uploads.map((u) => u.orderId), rejected: [], clockSkewMs: 2000,
+    }));
+    setup({ settings, catalog, events: saleEvents(SALE_A) });
+    await screen.findByRole("button", { name: /Bier/ });
+    click("Artikel abholen");
+    await enterPin(PIN);
+    expect(await screen.findByText("Artikel aktualisiert")).toBeInTheDocument();
+    click("Buchungen übertragen");
+    await enterPin(PIN);
+    expect(await screen.findByText("1 Buchung(en) übertragen")).toBeInTheDocument();
+    click(/Bier/);
+    await waitFor(() => expect(within(orderPanel()).getByText("Bier")).toBeInTheDocument());
+
+    expect(fetchCatalog).toHaveBeenCalledWith(settings, { pin: PIN, appVersion: APP_VERSION }); // the PIN was really used
+    expect(fake.bridge.saveSettings).toHaveBeenCalled();
+    expect(fake.bridge.saveCatalog).toHaveBeenCalled();
+    expect(fake.bridge.appendEvents).toHaveBeenCalled();
+    const bridgeCalls = Object.fromEntries(Object.entries(fake.bridge).map(([name, fn]) => [name, fn.mock.calls]));
+    expect(JSON.stringify(bridgeCalls)).not.toContain(PIN);
+    expect(JSON.stringify(fake.state)).not.toContain(PIN);
+    expect(JSON.stringify(consoleSpies.map((s) => s.mock.calls))).not.toContain(PIN);
+    for (const s of consoleSpies) s.mockRestore();
   });
 });
