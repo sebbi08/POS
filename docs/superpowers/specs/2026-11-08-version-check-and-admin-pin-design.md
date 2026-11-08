@@ -6,63 +6,52 @@
 
 ## Worum es geht und warum
 
-Kasse (Electron-App `terminal/`) und Server (`backend/`) müssen zueinander passen. Ändert sich
-das Format der Buchungen oder des Katalogs, darf keine alte Kasse mit einem neuen Server
-abgleichen und umgekehrt. Bisher gibt es dafür keine Prüfung. Das Auto-Update läuft nur im
-Hintergrund und wird erst beim Beenden der App installiert.
+Kasse (Electron-App `terminal/`) und Server (`backend/`) müssen beim Abgleich zueinander passen.
+Ändert sich das Format der Buchungen oder des Katalogs, darf keine alte Kasse mit einem neuen
+Server abgleichen und umgekehrt. Bisher gibt es dafür keine Prüfung.
 
 Außerdem soll nicht jeder, der an einer eingerichteten Kasse steht, Artikel abholen oder
 Buchungen übertragen können. Dafür ist künftig zusätzlich der Admin-PIN des Servers nötig.
 
 ## Ziele
 
-1. Ist beim Start der Kasse der Server erreichbar, werden die Versionen verglichen. Bei
-   Abweichung wird erst nach einem Update weitergearbeitet.
-2. Dieselbe Prüfung läuft bei „Artikel abholen“ und „Buchungen übertragen“.
-3. „Artikel abholen“ (auch beim Einrichten) und „Buchungen übertragen“ verlangen den Admin-PIN.
-   Der PIN wird ausschließlich auf dem Server geprüft und landet nie auf der Kasse, weder als
-   Klartext noch als Hash.
+1. Bei „Artikel abholen“ (auch beim ersten Abholen in der Einrichtung) und bei
+   „Buchungen übertragen“ werden die Versionen von Kasse und Server verglichen. Passen sie nicht,
+   findet kein Abgleich statt.
+2. Beide Abgleiche verlangen den Admin-PIN. Der PIN wird ausschließlich auf dem Server geprüft
+   und landet nie auf der Kasse, weder als Klartext noch als Hash.
+3. Die lokalen Daten der Kasse (Buchungen, Katalog, Einstellungen) bleiben über alle künftigen
+   Versionen migrierbar. Ein Update darf nie dazu führen, dass alte lokale Daten nicht mehr
+   gelesen werden können.
 
 ## Nicht-Ziele
 
+- **Keine Versionsprüfung beim Start der Kasse und kein erzwungenes Update** (Entscheidung des
+  Nutzers). Die Kasse startet immer wie bisher, mit oder ohne Netz.
 - Keine PIN-Abfrage für Kassieren, Storno, Nachdruck oder Einstellungen.
-- Keine Versionsprüfung und kein Update ohne Netz. Am Fest startet die Kasse wie bisher.
 - Kein automatisches Update des Servers.
 - Kein neues Verfahren für den Admin-PIN selbst. Er bleibt `ADMIN_PIN` auf dem Server, derselbe
   wie beim Admin-Login im Browser.
 
 ## Anti-Ziele
 
-- Die Kasse hängt beim Start lange, weil sie ohne Netz auf den Server wartet.
-- Eine offene Bestellung oder nicht übertragene Buchungen gehen durch das erzwungene Update
-  verloren.
+- Nicht übertragene Buchungen gehen durch ein Update verloren oder werden unlesbar.
 - Der PIN wird auf der Kasse gespeichert, geloggt oder in einer Datei abgelegt.
+- Die Kasse blockiert beim Kassieren wegen der Versionsprüfung oder des PINs.
 
 ## Entscheidungen des Nutzers
 
-1. **Beim Start mit erreichbarem Server:**
-   - **Kasse älter als Server:** Das Update wird erzwungen. Die Kasse lädt es, installiert es und
-     startet neu. Bis dahin wird nicht kassiert.
-   - **Kasse neuer als Server:** Fehlermeldung, die Kasse startet nicht.
-   - **Gleiche Version:** normaler Start.
-2. **Ohne Internet bzw. wenn der Server nicht erreichbar ist:** normaler Start ohne Prüfung.
-3. **Bei „Artikel abholen“ und „Buchungen übertragen“:** dieselbe Prüfung. Bei Abweichung kein
-   Abgleich, sondern eine Meldung, welche Seite aktualisiert werden muss.
-4. **Terminal-Schlüssel:** wird wie bisher beim Einrichten eingegeben und gespeichert.
-5. **Admin-PIN:** wird bei jedem „Artikel abholen“ (auch beim ersten Abholen in der Einrichtung)
+1. Die Versionsprüfung läuft **nur beim Abgleich** („Artikel abholen“ und
+   „Buchungen übertragen“), nicht beim Start. Bei Abweichung gibt es keinen Abgleich, sondern
+   eine Meldung, welche Seite aktualisiert werden muss.
+2. Die Kasse muss ihre lokalen Daten in jeder künftigen Version migrieren können.
+3. **Terminal-Schlüssel:** wird wie bisher beim Einrichten eingegeben und gespeichert.
+4. **Admin-PIN:** wird bei jedem „Artikel abholen“ (auch beim ersten Abholen in der Einrichtung)
    und bei jedem „Buchungen übertragen“ eingegeben. Der Server prüft ihn, die Kasse merkt ihn
    sich nicht.
-6. **Bestätigte Vorschläge:**
+5. **Bestätigte Vorschläge:**
    - Nach 5 falschen PINs nimmt der Server 5 Minuten lang keine weiteren Versuche an.
    - Die Versionsprüfung kommt vor der PIN-Abfrage.
-   - Eine offene Bestellung übersteht das Update.
-   - Als Notausgang startet die Kasse ohne Netzwerk trotzdem, falls der Server vor einem Fest
-     nicht rechtzeitig aktualisiert wurde.
-7. **Erzwungenes Update schlägt fehl, obwohl der Server erreichbar ist** (z. B. Server nur im
-   Vereins-WLAN ohne Internet, Release noch nicht fertig): Zusätzlich zu „Erneut versuchen“ gibt
-   es den Knopf **„Trotzdem starten“**. Die Kasse kassiert dann offline weiter, aber
-   „Artikel abholen“ und „Buchungen übertragen“ bleiben gesperrt, bis die Versionen passen
-   (die Versionsprüfung vor jedem Abgleich verhindert ihn ohnehin).
 
 ## Verhalten im Detail
 
@@ -73,16 +62,16 @@ Buchungen übertragen können. Dafür ist künftig zusätzlich der Admin-PIN des
 - Die nächste Version ist für alle **0.2.0** (meine Entscheidung). Ein Test stellt sicher, dass
   alle vier Dateien dieselbe Version tragen.
 - Der Release-Workflow prüft zusätzlich zur Kasse auch `backend/package.json` gegen den Tag.
-- Verglichen wird die vollständige Version (`MAJOR.MINOR.PATCH`), nicht nur ein Teil davon.
-  Gleich heißt identisch. „Älter“ und „neuer“ werden numerisch pro Stelle bestimmt (0.10.0 ist
-  neuer als 0.9.0). Eine Version, die nicht diesem Muster entspricht (auch mit Zusätzen wie
-  `-rc1`), gilt als „unbekannt“: Beim Start führt das zu einem normalen Start, beim Abgleich zur
-  Meldung „Versionen passen nicht zusammen“ (meine Entscheidung).
+- **Vergleich:**
+  - Verglichen wird die vollständige Version (`MAJOR.MINOR.PATCH`). Gleich heißt identisch.
+  - „Älter“ und „neuer“ werden numerisch pro Stelle bestimmt, 0.10.0 ist also neuer als 0.9.0.
+    Das bestimmt nur, welche Meldung erscheint.
+  - Eine Version, die nicht diesem Muster entspricht, gilt als „passt nicht“.
 
 ### Server
 
 - `GET /api/version` (öffentlich) liefert `{ version }`. Der Wert wird zur Laufzeit aus
-  `backend/package.json` gelesen.
+  `backend/package.json` neben `dist/` gelesen.
 - **Sync-Endpunkte:** `GET /api/sync/catalog` und `POST /api/sync/bookings` verlangen
   zusätzlich zu `x-terminal-id`/`x-terminal-key` noch zwei Header:
   - `x-terminal-version`: Fehlt er oder weicht er von der Serverversion ab, antwortet der Server
@@ -92,7 +81,7 @@ Buchungen übertragen können. Dafür ist künftig zusätzlich der Admin-PIN des
     `{ error: "Admin-PIN falsch" }`.
 
   Kassen der Version 0.1.0 senden keinen Versions-Header und werden damit abgewiesen. Sie
-  aktualisieren sich im Hintergrund ohnehin selbst.
+  aktualisieren sich im Hintergrund selbst und installieren das Update beim nächsten Beenden.
 - **Reihenfolge der Prüfungen:** Terminal-Schlüssel (401 „Terminal-Schlüssel ungültig“), dann
   Version (409), dann Sperre (429), dann PIN (401 „Admin-PIN falsch“).
 - **Sperre gegen Durchprobieren:**
@@ -104,46 +93,15 @@ Buchungen übertragen können. Dafür ist künftig zusätzlich der Admin-PIN des
   - Der PIN wird zeitkonstant verglichen.
 - Der PIN wird nirgends geloggt.
 
-### Kasse – Start
-
-1. Gibt es noch keine Einstellungen, also noch keine Einrichtung: keine Prüfung beim Start (die
-   Prüfung kommt im Assistenten, siehe unten).
-2. Gibt es Einstellungen: Die Kasse zeigt kurz „Prüfe Version …“ und ruft `GET /api/version` mit
-   einem Timeout von **3 Sekunden** auf (meine Entscheidung). Die 3 Sekunden gelten nur für diese
-   Abfrage; das Laden eines Updates darf danach so lange dauern wie nötig.
-   - **Kein Ergebnis** (Timeout, Netzfehler, Fehlerstatus): normaler Start, keine Meldung.
-   - **Gleiche Version:** normaler Start.
-   - **Server neuer:** Bildschirm „Update auf Version X wird geladen …“ mit Fortschritt. Die
-     App prüft über `electron-updater` das GitHub-Release, lädt es und installiert es mit
-     sofortigem Neustart (`quitAndInstall`).
-     - Gibt es kein passendes Update oder schlägt das Laden fehl: Fehlermeldung „Update auf
-       Version X konnte nicht geladen werden“ mit den Knöpfen „Erneut versuchen“ und
-       „Trotzdem starten“. „Trotzdem starten“ öffnet die Kasse normal; jeder spätere Abgleich
-       scheitert an der Versionsprüfung (Meldung „Kasse ist veraltet …“), bis das Update
-       installiert ist. Offline startet die Kasse ohnehin normal.
-     - Nicht paketierte App (Entwicklung/Tests): kein Update möglich, stattdessen dieselbe
-       Fehlermeldung mit denselben Knöpfen.
-   - **Kasse neuer:** Fehlermeldung „Server ist veraltet (Server X, Kasse Y) – bitte zuerst den
-     Server aktualisieren“ und kein Start. Es gibt einen Knopf „Erneut versuchen“.
-3. Lokale Buchungen und eine offene Bestellung liegen auf der Festplatte außerhalb des
-   Programmverzeichnisses und bleiben beim Update erhalten.
-4. Das bisherige Hintergrund-Update (Installation beim Beenden) bleibt zusätzlich bestehen.
-   Beide nutzen einen gemeinsamen Updater, damit Hintergrund-Prüfung und erzwungenes Update
-   nicht gegeneinander laufen (meine Entscheidung).
-
-### Kasse – Einrichtung
-
-- „Terminals laden“ ruft zuerst `GET /api/version` auf. Weichen die Versionen ab, gilt dasselbe
-  wie beim Start: Server neuer → Update erzwingen, Kasse neuer → Fehlermeldung.
-- „Einrichten & Artikel abholen“ prüft die Version erneut und fragt dann den Admin-PIN ab,
-  siehe unten.
-
-### Kasse – „Artikel abholen“ und „Buchungen übertragen“
+### Kasse – „Artikel abholen“, „Buchungen übertragen“ und die Einrichtung
 
 1. Zuerst `GET /api/version`, mit dem normalen 15-Sekunden-Timeout des Abgleichs.
-   - **Abweichung:** kein Abgleich. Meldung „Kasse ist veraltet – bitte App neu starten, um das
-     Update zu installieren“ bzw. „Server ist veraltet – bitte zuerst den Server aktualisieren“.
-     Es folgt keine PIN-Abfrage.
+   - **Abweichung, Kasse älter:** Meldung „Kasse ist veraltet (Kasse Y, Server X) – bitte App
+     beenden und neu starten, damit das Update installiert wird“. Kein Abgleich, keine
+     PIN-Abfrage.
+   - **Abweichung, Kasse neuer oder Version unbekannt:** Meldung „Server ist veraltet (Server X,
+     Kasse Y) – bitte zuerst den Server aktualisieren“ bzw. „Versionen passen nicht zusammen“.
+     Kein Abgleich.
    - **Server nicht erreichbar:** die bestehende Meldung „Server nicht erreichbar“.
 2. Dann ein Dialog „Admin-PIN“ mit einer Ziffern-Eingabe, maskiert, und den Knöpfen „OK“ und
    „Abbrechen“.
@@ -156,26 +114,48 @@ Buchungen übertragen können. Dafür ist künftig zusätzlich der Admin-PIN des
 5. Der PIN liegt nur im Speicher, solange der Abgleich läuft. Danach wird er verworfen. Er wird
    nicht in `settings.json`, im Event-Log oder in Logs gespeichert.
 6. Ein Teilerfolg beim Übertragen wird wie bisher behandelt (`partial.accepted` wird markiert).
+7. **Einrichtung:** „Einrichten & Artikel abholen“ durchläuft dieselben Schritte. „Terminals
+   laden“ bleibt ohne Versionsprüfung und ohne PIN.
+8. Das Hintergrund-Update bleibt unverändert. Es installiert beim Beenden und wird nie erzwungen.
+
+### Migrierbare lokale Daten
+
+Damit künftige Versionen alte Daten immer lesen können (meine Ausgestaltung):
+
+- Der lokale Speicher bekommt eine Formatversion: die Datei `format.json` mit `{ "format": 1 }`
+  im Datenverzeichnis. Fehlt sie, gilt Format 1; das ist das heutige Format.
+- `LocalStore` bekommt beim Start einen Migrationsschritt. Er liest die Formatversion und führt
+  nacheinander alle Migrationen bis zum aktuellen Format aus. Heute gibt es noch keine Migration,
+  nur den Mechanismus und den Test.
+- Jede Migration schreibt atomar (tmp-Datei → fsync → rename) und erhöht erst danach `format.json`.
+- Die Kasse weigert sich, Daten mit einem **höheren** Format als ihrem eigenen zu öffnen. Das
+  passiert nur, wenn jemand eine ältere App über eine neuere installiert. Sie zeigt dann
+  „Lokale Daten stammen von einer neueren Version – bitte aktuelle Version installieren“ und
+  verändert nichts.
+- Regel für künftige Änderungen, festgehalten als Kommentar im Store und in diesem Dokument:
+  Felder in Events, Katalog und Einstellungen werden nur ergänzt, nie umbenannt oder entfernt,
+  ohne dass eine Migration sie überführt. Neue Pflichtfelder bekommen beim Lesen einen
+  Standardwert.
 
 ### Admin-Bereich
 
-Keine Änderung nötig. Optional zeigt die Auswertungsseite die Serverversion, zum Beispiel in
-der Fußzeile (meine Entscheidung: ja, klein in der Kopfzeile neben „Administration“).
+Die Serverversion wird klein in der Kopfzeile neben „Administration“ angezeigt (meine
+Entscheidung).
 
 ## Tests
 
 - Die bestehenden Sync-Tests im Backend und die End-to-End-Tests senden künftig Version und PIN.
 - Die End-to-End-Tests geben den PIN `0000` in den neuen Dialog ein (Testserver mit
   `ADMIN_PIN=0000`).
-- Das Backend liest die Version zur Laufzeit aus `backend/package.json` neben `dist/`. So wird
-  es heute gestartet.
+- Ein Test prüft, dass alle vier `package.json` dieselbe Version tragen.
+- Store-Tests:
+  - fehlende `format.json` gilt als Format 1;
+  - eine höhere Formatversion wird abgelehnt, ohne dass Daten verändert werden;
+  - der Migrations-Mechanismus führt eine Test-Migration atomar aus.
 
 ## Dem Builder überlassen
 
-- Wo die Startprüfung technisch läuft, im Main-Prozess oder im Renderer mit IPC zum Updater,
-  solange die App ohne Server höchstens 3 Sekunden später startet.
-- Wie `electron-updater` für das erzwungene Update angesprochen wird (`checkForUpdates`,
-  `downloadUpdate`, `quitAndInstall`) und wie der Fortschritt übermittelt wird.
 - Die Form der PIN-Eingabe, ob Ziffernblock wie beim Admin-Login oder Eingabefeld; deutsch und
   touch-tauglich.
 - Datenstruktur der Sperre.
+- Wie die Formatversion bei Fehlern an den Renderer gemeldet wird.
