@@ -11,6 +11,7 @@ const bridge: TerminalBridge = {
   saveSettings: (s) => ipcRenderer.invoke("store:saveSettings", s),
   loadSettings: () => ipcRenderer.invoke("store:loadSettings"),
   appVersion: () => ipcRenderer.invoke("app:version"),
+  storeError: () => ipcRenderer.invoke("app:storeError"),
   onUsbChoose: (cb) => {
     const listener = (_e: Electron.IpcRendererEvent, devices: UsbDeviceChoice[]) => cb(devices);
     ipcRenderer.on("usb:choose", listener);

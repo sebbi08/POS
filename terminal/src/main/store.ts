@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { CatalogSnapshot } from "../shared/contract";
+import { CURRENT_FORMAT, FormatTooNewError, MIGRATIONS, type Migration } from "./migrations";
 import type { LocalEvent, NewEvent, TerminalSettings } from "../shared/types";
 
 interface SyncedLine { orderId: string; syncedAt: string }
@@ -21,12 +22,14 @@ const SYNCED: JsonlFile<SyncedLine> = {
 };
 const CATALOG = "catalog.json";
 const SETTINGS = "settings.json";
+const FORMAT = "format.json";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NEWLINE = 0x0a;
 
 /**
  * Crash-safe local storage of the terminal. An operation resolves only after its
  * data has been fsynced. All operations run one after another (internal queue).
+ * Changing stored data: add fields only (see the rule in migrations.ts).
  */
 export class LocalStore {
   private queue: Promise<unknown> = Promise.resolve();
@@ -94,6 +97,39 @@ export class LocalStore {
 
   loadSettings(): Promise<TerminalSettings | null> {
     return this.serialized(() => readJson<TerminalSettings>(this.file(SETTINGS)));
+  }
+
+  /** Stored data format; a missing format.json counts as format 1. */
+  format(): Promise<number> {
+    return this.serialized(() => this.readFormat());
+  }
+
+  /**
+   * Brings the data directory to format `current`. Throws FormatTooNewError (changing nothing)
+   * if it is newer. Each step is committed by writing format.json, so a failed migration
+   * leaves the format at the last completed step.
+   */
+  migrate(migrations: Migration[] = MIGRATIONS, current: number = CURRENT_FORMAT): Promise<void> {
+    return this.serialized(async () => {
+      const start = await this.readFormat();
+      if (start > current) throw new FormatTooNewError();
+      for (let from = start; from < current; from++) {
+        const migration = migrations.find((m) => m.from === from);
+        if (!migration) throw new Error(`no migration from format ${from}`);
+        await migration.run(this.dir);
+        await this.writeJson(FORMAT, { format: from + 1 });
+      }
+      if (!(await readJson<unknown>(this.file(FORMAT)))) await this.writeJson(FORMAT, { format: current });
+    });
+  }
+
+  private async readFormat(): Promise<number> {
+    const stored = await readJson<{ format?: unknown }>(this.file(FORMAT));
+    if (stored === null) return 1;
+    if (!Number.isInteger(stored.format) || (stored.format as number) < 1) {
+      throw new Error(`${this.file(FORMAT)}: invalid format`);
+    }
+    return stored.format as number;
   }
 
   /**

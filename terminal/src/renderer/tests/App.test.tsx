@@ -834,3 +834,16 @@ describe("Admin-PIN and version check", () => {
     for (const s of consoleSpies) s.mockRestore();
   });
 });
+
+describe("storeError", () => {
+  it("storeError shows blocking message", async () => {
+    fake = installFakeBridge({ settings, catalog });
+    const msg = "Lokale Daten stammen von einer neueren Version – bitte aktuelle Version installieren";
+    fake.bridge.storeError.mockResolvedValue(msg);
+    render(<App />);
+    expect(await screen.findByText(msg)).toBeTruthy();
+    expect(screen.queryByText("Lade …")).toBeNull();
+    expect(fake.bridge.loadSettings).not.toHaveBeenCalled();
+    expect(fake.bridge.readEvents).not.toHaveBeenCalled();
+  });
+});

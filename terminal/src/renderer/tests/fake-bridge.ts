@@ -75,6 +75,7 @@ export function installFakeBridge(init: Init = {}) {
     saveSettings: vi.fn(async (s: TerminalSettings) => { state.settings = clone(s); log.push("saveSettings"); }),
     loadSettings: vi.fn(async () => clone(state.settings)),
     appVersion: vi.fn(async () => "0.2.0"),
+    storeError: vi.fn(async (): Promise<string | null> => null),
     onUsbChoose: vi.fn(() => () => {}),
     chooseUsb: vi.fn(async () => {}),
     onUpdateReady: vi.fn((cb: (version: string) => void) => {

@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, appendFile, access, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FormatTooNewError } from "./migrations";
 import { LocalStore } from "./store";
 import type { NewEvent } from "../shared/types";
 import type { CatalogSnapshot } from "../shared/contract";
@@ -261,5 +262,60 @@ describe("LocalStore", () => {
     const stored = await new LocalStore(dir).readEvents();
     expect(stored.map((e) => e.seq)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
     expect(new Set(stored.map((e) => e.orderId)).size).toBe(20);
+  });
+});
+
+describe("LocalStore.migrate", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "pos-terminal-migrate-"));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const formatFile = () => join(dir, "format.json");
+  const diskFormat = async () => (JSON.parse(await readFile(formatFile(), "utf8")) as { format: number }).format;
+
+  it("missing format.json counts as format 1 and is written", async () => {
+    const store = new LocalStore(dir);
+    await store.migrate();
+    expect(await store.format()).toBe(1);
+    expect(JSON.parse(await readFile(formatFile(), "utf8"))).toEqual({ format: 1 });
+  });
+
+  it("higher format is refused without touching files", async () => {
+    const store = new LocalStore(dir);
+    await store.appendEvents([event("o1")]);
+    await writeFile(formatFile(), JSON.stringify({ format: 2 }));
+    const read = () => Promise.all(["format.json", "events.jsonl"].map((f) => readFile(join(dir, f))));
+    const before = await read();
+    await expect(store.migrate()).rejects.toBeInstanceOf(FormatTooNewError);
+    expect(await read()).toEqual(before);
+  });
+
+  it("runs migrations in order and bumps format after each", async () => {
+    const store = new LocalStore(dir);
+    const calls: string[] = [];
+    const step = (from: number) => async () => {
+      calls.push(`from${from}:disk=${await diskFormat().catch(() => "none")}`);
+    };
+    await store.migrate([{ from: 2, run: step(2) }, { from: 1, run: step(1) }], 3);
+    expect(calls).toEqual(["from1:disk=none", "from2:disk=2"]);
+    expect(await diskFormat()).toBe(3);
+    expect(await store.format()).toBe(3);
+  });
+
+  it("failed migration leaves format at the last completed step", async () => {
+    const store = new LocalStore(dir);
+    await expect(
+      store.migrate([
+        { from: 1, run: async () => {} },
+        { from: 2, run: async () => { throw new Error("boom"); } },
+      ], 3),
+    ).rejects.toThrow("boom");
+    expect(await diskFormat()).toBe(2);
   });
 });

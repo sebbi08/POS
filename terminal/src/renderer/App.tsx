@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import CancelList from "./components/CancelList";
 import CheckoutDialog from "./components/CheckoutDialog";
 import ItemGrid from "./components/ItemGrid";
@@ -12,7 +12,27 @@ import { useTerminal } from "./state/useTerminal";
 
 type Dialog = "checkout" | "cancel" | "settings" | null;
 
+/** Asks main whether the local store is usable before anything touches it. */
 export default function App() {
+  const [storeError, setStoreError] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    window.terminal.storeError().then(setStoreError, () => setStoreError("Lokale Daten konnten nicht geprüft werden – bitte App neu starten"));
+  }, []);
+
+  if (storeError === undefined) {
+    return <main className="min-h-screen flex items-center justify-center text-gray-400">Lade …</main>;
+  }
+  if (storeError !== null) {
+    return (
+      <main role="alert" className="min-h-screen flex items-center justify-center p-8 text-center text-2xl font-semibold text-red-300">
+        {storeError}
+      </main>
+    );
+  }
+  return <Till />;
+}
+
+function Till() {
   const t = useTerminal();
   const { actions } = t;
   const [resetup, setResetup] = useState(false);

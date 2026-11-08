@@ -21,6 +21,8 @@ export interface TerminalBridge {   // window.terminal
   saveSettings(s: TerminalSettings): Promise<void>;
   loadSettings(): Promise<TerminalSettings | null>;
   appVersion(): Promise<string>;
+  /** Why the local store is unusable (blocks the app), or null. */
+  storeError(): Promise<string | null>;
   /** Main asks which USB device to pair (printer search); returns an unsubscribe. */
   onUsbChoose(cb: (devices: UsbDeviceChoice[]) => void): () => void;
   /** Answer to onUsbChoose; null cancels the search. */
