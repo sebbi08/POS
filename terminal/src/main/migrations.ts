@@ -14,6 +14,10 @@ export const CURRENT_FORMAT = 1;
 export interface Migration {
   /** The format this migration upgrades from (to `from + 1`). */
   from: number;
+  /**
+   * Converts the files in `dir`. A step that crashes before format.json is bumped runs again on
+   * the next start, so it must be idempotent and write each file atomically (temp file + rename).
+   */
   run(dir: string): Promise<void>;
 }
 
