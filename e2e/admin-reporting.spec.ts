@@ -1,8 +1,12 @@
 import { randomUUID } from "crypto";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { test, expect } from "@playwright/test";
 
 const API = "http://localhost:3001/api";
 const ADMIN = { "Content-Type": "application/json", "x-admin-pin": "0000" };
+// The server only accepts uploads from a terminal of its own version.
+const SERVER_VERSION: string = JSON.parse(readFileSync(join(__dirname, "../backend/package.json"), "utf8")).version;
 
 test.describe("Admin — Buchungen, Auswertung, Import/Export", () => {
   const terminalName = `E2E-Admin-Terminal-${Date.now()}`;
@@ -37,7 +41,7 @@ test.describe("Admin — Buchungen, Auswertung, Import/Export", () => {
         "Content-Type": "application/json",
         "x-terminal-id": terminalId,
         "x-terminal-key": terminalKey,
-        "x-terminal-version": "0.2.0",
+        "x-terminal-version": SERVER_VERSION,
         "x-admin-pin": "0000",
       },
       data: {
