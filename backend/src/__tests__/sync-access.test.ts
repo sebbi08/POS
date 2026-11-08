@@ -70,12 +70,17 @@ describe("checkSyncAccess", () => {
   });
 
   it("missing PIN counts as wrong PIN", async () => {
-    expect((await call(undefined)).status).toBe(401);
+    for (let i = 0; i < 5; i++) expect((await call(undefined)).status).toBe(401);
+    expect((await call("0000")).status).toBe(429);
   });
 
   it("5 wrong PINs lock the terminal: 6th request with correct PIN → 429", async () => {
     for (let i = 0; i < 5; i++) expect((await call("1")).status).toBe(401);
-    expect((await call("0000")).status).toBe(429);
+    const res = await call("0000");
+    expect(res.status).toBe(429);
+    expect(res.body).toEqual({
+      error: "Zu viele falsche PIN-Versuche – bitte in 5 Minuten erneut versuchen",
+    });
   });
 
   it("lock expires after 5 minutes and counter restarts", async () => {

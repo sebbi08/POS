@@ -20,6 +20,7 @@ import { initTables } from "../db.js";
 import { orders } from "../modules/orders/orders.projections.js";
 import { Order } from "../modules/orders/orders.types.js";
 import { BookingUpload } from "../modules/sync/sync.types.js";
+import { serverVersion } from "../version.js";
 
 // Same mount order as index.ts: the sync router parses its own large bodies.
 const app = express();
@@ -126,7 +127,7 @@ function upload(body: unknown) {
     .post("/api/sync/bookings")
     .set("x-terminal-id", "t1")
     .set("x-terminal-key", "secret-key-value")
-    .set("x-terminal-version", "0.2.0")
+    .set("x-terminal-version", serverVersion())
     .set("x-admin-pin", "0000")
     .send(body as object);
 }
@@ -160,7 +161,7 @@ describe("GET /api/sync/catalog", () => {
       .get("/api/sync/catalog")
       .set("x-terminal-id", "t1")
       .set("x-terminal-key", "secret-key-value")
-      .set("x-terminal-version", "0.2.0")
+      .set("x-terminal-version", serverVersion())
       .set("x-admin-pin", "0000");
     expect(res.status).toBe(200);
     expect(Number.isNaN(Date.parse(res.body.serverTime))).toBe(false);

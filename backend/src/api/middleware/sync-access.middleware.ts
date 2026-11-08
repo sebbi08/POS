@@ -39,7 +39,7 @@ export function checkSyncAccess(
   if (guard.isLocked(terminal.id)) {
     res
       .status(429)
-      .json({ error: "Zu viele Fehlversuche, bitte später erneut versuchen" });
+      .json({ error: "Zu viele falsche PIN-Versuche – bitte in 5 Minuten erneut versuchen" });
     return;
   }
   if (!pinMatches(header(req, "x-admin-pin"), config.adminPin)) {
