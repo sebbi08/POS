@@ -37,6 +37,8 @@ test.describe("Admin — Buchungen, Auswertung, Import/Export", () => {
         "Content-Type": "application/json",
         "x-terminal-id": terminalId,
         "x-terminal-key": terminalKey,
+        "x-terminal-version": "0.2.0",
+        "x-admin-pin": "0000",
       },
       data: {
         orders: [

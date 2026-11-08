@@ -126,6 +126,8 @@ function upload(body: unknown) {
     .post("/api/sync/bookings")
     .set("x-terminal-id", "t1")
     .set("x-terminal-key", "secret-key-value")
+    .set("x-terminal-version", "0.2.0")
+    .set("x-admin-pin", "0000")
     .send(body as object);
 }
 
@@ -157,7 +159,9 @@ describe("GET /api/sync/catalog", () => {
     const res = await request(app)
       .get("/api/sync/catalog")
       .set("x-terminal-id", "t1")
-      .set("x-terminal-key", "secret-key-value");
+      .set("x-terminal-key", "secret-key-value")
+      .set("x-terminal-version", "0.2.0")
+      .set("x-admin-pin", "0000");
     expect(res.status).toBe(200);
     expect(Number.isNaN(Date.parse(res.body.serverTime))).toBe(false);
     expect(res.body.terminal).toEqual({

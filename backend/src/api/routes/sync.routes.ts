@@ -9,6 +9,7 @@ import {
   ingestUploads,
 } from "../../modules/sync/sync.service.js";
 import { Terminal } from "../../modules/terminals/terminals.types.js";
+import { checkSyncAccess } from "../middleware/sync-access.middleware.js";
 import { checkTerminalKey } from "../middleware/terminal-auth.middleware.js";
 
 const MAX_ORDERS_PER_UPLOAD = 200;
@@ -18,6 +19,7 @@ const router = Router();
 router.get(
   "/catalog",
   checkTerminalKey,
+  checkSyncAccess,
   async (_req: Request, res: Response): Promise<void> => {
     const terminal = res.locals.terminal as Terminal;
     res.json(await getCatalogSnapshot(terminal));
@@ -27,7 +29,8 @@ router.get(
 router.post(
   "/bookings",
   checkTerminalKey,
-  // Parsed only after the key check; a festival's bookings exceed the default limit.
+  checkSyncAccess,
+  // Parsed only after the key and access checks; a festival's bookings exceed the default limit.
   express.json({ limit: "10mb" }),
   async (req: Request, res: Response): Promise<void> => {
     const uploads = req.body?.orders;
