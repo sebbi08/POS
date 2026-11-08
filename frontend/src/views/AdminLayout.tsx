@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../api/client";
 import CatalogManager from "../components/CatalogManager";
 import CompanySettings from "../components/CompanySettings";
 import TerminalConfig from "../components/TerminalConfig";
@@ -22,12 +23,25 @@ const tabs: { id: Tab; label: string }[] = [
 function AdminLayout() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("report");
+  const [version, setVersion] = useState("");
+
+  useEffect(() => {
+    api
+      .get<{ version?: string }>("/version")
+      .then((r) => setVersion(r?.version ?? ""))
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="min-h-screen flex">
       <nav className="w-56 bg-gray-800 flex flex-col border-r border-gray-700">
         <div className="p-4 border-b border-gray-700">
-          <h1 className="text-white font-bold text-lg">Administration</h1>
+          <h1 className="text-white font-bold text-lg">
+            Administration
+            {version && (
+              <span className="ml-2 text-xs font-normal text-gray-400">v{version}</span>
+            )}
+          </h1>
         </div>
         <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
           {tabs.map((t) => (

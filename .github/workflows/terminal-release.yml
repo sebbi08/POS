@@ -22,6 +22,8 @@ jobs:
         run: |
           test "v$(node -p "require('./terminal/package.json').version")" = "$GITHUB_REF_NAME" \
             || { echo "Tag $GITHUB_REF_NAME does not match terminal/package.json version"; exit 1; }
+          test "v$(node -p "require('./backend/package.json').version")" = "$GITHUB_REF_NAME" \
+            || { echo "Tag $GITHUB_REF_NAME does not match backend/package.json version"; exit 1; }
       - name: Check tagged commit is on the default branch
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/${{ github.event.repository.default_branch }}
       # One draft up front so the matrix jobs do not race on creating it.

@@ -13,6 +13,7 @@ import ordersRoutes from "./api/routes/orders.routes.js";
 import reportingRoutes from "./api/routes/reporting.routes.js";
 import syncRoutes from "./api/routes/sync.routes.js";
 import terminalsRoutes from "./api/routes/terminals.routes.js";
+import versionRoutes from "./api/routes/version.routes.js";
 
 const startupLog = (msg: string) =>
   console.log(`[backend:startup] ${msg}  (${new Date().toISOString()})`);
@@ -32,6 +33,7 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.use("/api/version", versionRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/catalog", catalogRoutes);
 app.use("/api/orders", ordersRoutes);

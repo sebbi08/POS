@@ -102,6 +102,19 @@ describe("AdminLayout", () => {
     expect(screen.getByText("Abmelden")).toBeInTheDocument();
   });
 
+  it("header shows server version", async () => {
+    const original = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation((path: string) =>
+      path === "/version" ? Promise.resolve({ version: "0.2.0" }) : original(path),
+    );
+    try {
+      render(<MemoryRouter><AdminLayout /></MemoryRouter>);
+      expect(await screen.findByText("v0.2.0")).toBeInTheDocument();
+    } finally {
+      vi.mocked(api.get).mockImplementation(original);
+    }
+  });
+
   it("opens on the Auswertung tab", async () => {
     render(<MemoryRouter><AdminLayout /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Auswertung" })).toBeInTheDocument();
