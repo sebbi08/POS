@@ -790,6 +790,26 @@ describe("Admin-PIN and version check", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Einrichten & Artikel abholen" })).toBeEnabled());
   });
 
+  it("setup: version mismatch on the new server shows the message, asks no PIN, saves nothing", async () => {
+    const text = "Kasse ist veraltet (Kasse 0.2.0, Server 0.3.0) – bitte App beenden und neu starten, damit das Update installiert wird";
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }]);
+    vi.mocked(checkServerVersion).mockRejectedValueOnce(new SyncError(text));
+    setup({});
+    fireEvent.change(await screen.findByLabelText("Serveradresse"), { target: { value: "kasse.example" } });
+    click("Terminals laden");
+    fireEvent.click(await screen.findByRole("button", { name: "Theke 1" }));
+    fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "geheim" } });
+    click("Einrichten & Artikel abholen");
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(checkServerVersion).toHaveBeenCalledWith("https://kasse.example", APP_VERSION);
+    expect(screen.queryByRole("dialog", { name: "Admin-PIN" })).not.toBeInTheDocument();
+    expect(fetchCatalog).not.toHaveBeenCalled();
+    expect(fake.bridge.saveCatalog).not.toHaveBeenCalled();
+    expect(fake.bridge.saveSettings).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Serveradresse")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Einrichten & Artikel abholen" })).toBeEnabled());
+  });
+
   it("setup: cancel in PIN dialog saves nothing and wizard stays", async () => {
     vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }]);
     setup({});
@@ -806,7 +826,8 @@ describe("Admin-PIN and version check", () => {
   });
 
   it("PIN is not persisted", async () => {
-    const PIN = "987654";
+    // Long enough that it cannot appear by chance in a UUID or timestamp.
+    const PIN = "731904826153";
     const consoleSpies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m));
     vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 1000 });
     vi.mocked(uploadAll).mockImplementation(async (_s, uploads) => ({
