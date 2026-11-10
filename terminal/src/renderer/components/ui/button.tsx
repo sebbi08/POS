@@ -28,10 +28,10 @@ const buttonVariants = cva(
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-8",
         "icon-lg": "size-10",
-        // Till sizes: every tappable element is at least 48 x 48 px.
-        touch: "min-h-12 min-w-12 px-4 text-base",
-        "touch-lg": "min-h-16 px-6 text-xl font-bold",
-        key: "h-14 text-2xl",
+        // Till sizes: every tappable element is at least 48 x 48 px; a tap never selects text or waits for a double-tap zoom.
+        touch: "min-h-12 min-w-12 px-4 text-base select-none touch-manipulation",
+        "touch-lg": "min-h-16 px-6 text-xl font-bold select-none touch-manipulation",
+        key: "h-14 text-2xl select-none touch-manipulation",
       },
     },
     defaultVariants: {

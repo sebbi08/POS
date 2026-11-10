@@ -641,7 +641,8 @@ describe("App", () => {
     setup({ settings, catalog, events: saleEvents(SALE_A) });
     fireEvent.click(await screen.findByRole("button", { name: "Storno" }));
     fireEvent.click(screen.getByRole("button", { name: /#aaaaaaaa/ }));
-    click("Buchungen übertragen"); // reachable only in this test; the dialog covers it on screen
+    // Reachable only in this test: the dialog covers it on screen and hides it from assistive tech.
+    fireEvent.click(screen.getByRole("button", { name: "Buchungen übertragen", hidden: true }));
     await enterPin();
     await waitFor(() => expect(uploadAll).toHaveBeenCalled());
     click("Ja, stornieren");
@@ -774,7 +775,8 @@ describe("Admin-PIN and version check", () => {
     await screen.findByRole("button", { name: /Bier/ });
     click("Artikel abholen");
     await screen.findByRole("dialog", { name: "Admin-PIN" });
-    expect(screen.getByRole("button", { name: "Buchungen übertragen" })).toBeDisabled();
+    // The modal dialog hides the page behind it from assistive tech, hence hidden: true.
+    expect(screen.getByRole("button", { name: "Buchungen übertragen", hidden: true })).toBeDisabled();
   });
 
   it("wrong PIN on upload shows Admin-PIN falsch, nothing marked synced", async () => {

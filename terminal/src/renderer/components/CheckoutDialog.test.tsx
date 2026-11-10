@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import CheckoutDialog from "./CheckoutDialog";
 
 /** Opens the dialog for an order of 7,50 €. */
@@ -100,6 +100,20 @@ describe("CheckoutDialog", () => {
     const { given } = renderDialog();
     for (const key of ["1", "2", ".", "5"]) fireEvent.keyDown(document, { key });
     expect(given()).toBe("12,5");
+  });
+
+  it("a tap outside keeps the entered amount", async () => {
+    const { onCancel, tap, given } = renderDialog();
+    tap("5");
+    // Radix listens for outside pointer-downs one tick after opening and dismisses on the click that follows.
+    const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    await tick();
+    fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
+    await tick();
+    expect(screen.getByRole("dialog", { name: "Bezahlen" })).toBeInTheDocument();
+    expect(given()).toBe("5");
+    expect(onCancel).not.toHaveBeenCalled();
   });
 
   it("Abschließen & Drucken confirms, Abbrechen cancels", () => {

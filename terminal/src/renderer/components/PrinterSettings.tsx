@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { TouchDialog } from "@/components/ui/touch-dialog";
 import type { SavedPrinter, TerminalSettings, UsbDeviceChoice } from "../../shared/types";
 import { encodeJob } from "../print/encode";
 import type { ReceiptLine } from "../print/layout";
@@ -114,120 +117,108 @@ function PrinterSettings({ settings, onSave }: Props) {
 
   return (
     <>
-      <button
+      <Button
+        type="button"
+        variant="ghost"
+        size="touch"
         onClick={openDialog}
-        className="text-gray-400 hover:text-white text-sm px-2 py-1 rounded hover:bg-gray-700 transition-colors"
+        className="text-2xl text-muted-foreground"
         aria-label="Druckereinstellungen"
       >
         &#9881;
-      </button>
+      </Button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-gray-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h2 className="text-white text-lg font-bold mb-4">Druckereinstellungen</h2>
-
-            <div className="space-y-4">
-              <div>
-                <span className="text-gray-400 text-xs block mb-1">Drucker</span>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center justify-between bg-gray-700 rounded-lg px-3 py-2">
-                    {printer ? (
-                      <>
-                        <span className="text-white text-sm truncate">{printer.name}</span>
-                        <button
-                          onClick={() => setPrinter(null)}
-                          className="text-red-400 hover:text-red-300 text-sm ml-2"
-                          aria-label="Drucker entfernen"
-                        >
-                          ×
-                        </button>
-                      </>
-                    ) : (
-                      <span className="text-gray-400 text-sm">Kein Drucker eingerichtet</span>
-                    )}
-                  </div>
-                  <button
-                    onClick={handleSearch}
-                    disabled={busy}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg px-3 py-2 text-sm transition-colors"
-                  >
-                    {busy && !choices ? "..." : "Suchen"}
-                  </button>
-                </div>
-              </div>
-
-              {choices && (
-                <div className="space-y-1">
-                  <span className="text-gray-400 text-xs block">USB-Geräte</span>
-                  {choices.length === 0 && (
-                    <div className="text-gray-400 text-sm">Keine USB-Geräte gefunden</div>
-                  )}
-                  <div className="max-h-32 overflow-y-auto space-y-1">
-                    {choices.map((d) => (
-                      <button
-                        key={d.deviceId}
-                        onClick={() => answer(d.deviceId)}
-                        className="w-full text-left bg-gray-700 hover:bg-gray-600 text-white text-sm rounded px-2 py-1"
+        <TouchDialog title="Druckereinstellungen" onClose={() => setOpen(false)} className="w-[28rem]">
+          <div className="space-y-4">
+            <div>
+              <span className="text-muted-foreground text-xs block mb-1">Drucker</span>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 min-h-12 flex items-center justify-between bg-muted rounded-lg pl-3">
+                  {printer ? (
+                    <>
+                      <span className="text-sm truncate">{printer.name}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="touch"
+                        onClick={() => setPrinter(null)}
+                        className="text-xl text-destructive"
+                        aria-label="Drucker entfernen"
                       >
-                        {printerName(d)}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => answer(null)}
-                    className="text-gray-300 hover:text-white text-sm underline"
-                  >
-                    Abbrechen
-                  </button>
+                        ×
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">Kein Drucker eingerichtet</span>
+                  )}
                 </div>
-              )}
-
-              <div>
-                <label htmlFor="paper-width" className="text-gray-400 text-xs block mb-1">Papierbreite</label>
-                <select
-                  id="paper-width"
-                  value={paperWidth}
-                  onChange={(e) => setPaperWidth(e.target.value === "58" ? "58" : "80")}
-                  className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="58">58 mm</option>
-                  <option value="80">80 mm</option>
-                </select>
+                <Button type="button" size="touch" onClick={handleSearch} disabled={busy}>
+                  {busy && !choices ? "..." : "Suchen"}
+                </Button>
               </div>
+            </div>
 
-              {message && (
-                <div
-                  className={`text-sm text-center rounded-lg p-2 ${message.error ? "bg-red-500/20 text-red-300" : "bg-green-500/20 text-green-300"}`}
-                >
-                  {message.text}
+            {choices && (
+              <div className="space-y-1">
+                <span className="text-muted-foreground text-xs block">USB-Geräte</span>
+                {choices.length === 0 && (
+                  <div className="text-muted-foreground text-sm">Keine USB-Geräte gefunden</div>
+                )}
+                <div className="max-h-52 overflow-y-auto space-y-1">
+                  {choices.map((d) => (
+                    <Button
+                      key={d.deviceId}
+                      type="button"
+                      variant="secondary"
+                      size="touch"
+                      onClick={() => answer(d.deviceId)}
+                      className="w-full justify-start text-sm"
+                    >
+                      {printerName(d)}
+                    </Button>
+                  ))}
                 </div>
-              )}
+                <Button type="button" variant="secondary" size="touch" onClick={() => answer(null)}>
+                  Abbrechen
+                </Button>
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="paper-width" className="text-muted-foreground text-xs font-normal mb-1">Papierbreite</Label>
+              <select
+                id="paper-width"
+                value={paperWidth}
+                onChange={(e) => setPaperWidth(e.target.value === "58" ? "58" : "80")}
+                className="w-full h-12 rounded-md border border-input bg-input/30 px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <option value="58">58 mm</option>
+                <option value="80">80 mm</option>
+              </select>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mt-6">
-              <button
-                onClick={handleTestPrint}
-                disabled={busy || !printer}
-                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg py-2 text-sm transition-colors"
+            {message && (
+              <div
+                className={`text-sm text-center rounded-lg p-2 ${message.error ? "bg-red-500/20 text-red-300" : "bg-green-500/20 text-green-300"}`}
               >
-                Testdruck
-              </button>
-              <button
-                onClick={handleSave}
-                className="bg-green-700 hover:bg-green-600 text-white rounded-lg py-2 text-sm transition-colors"
-              >
-                Speichern
-              </button>
-              <button
-                onClick={() => setOpen(false)}
-                className="bg-red-900 hover:bg-red-800 text-red-300 rounded-lg py-2 text-sm transition-colors"
-              >
-                Schließen
-              </button>
-            </div>
+                {message.text}
+              </div>
+            )}
           </div>
-        </div>
+
+          <div className="grid grid-cols-3 gap-2 mt-2">
+            <Button type="button" variant="secondary" size="touch" onClick={handleTestPrint} disabled={busy || !printer}>
+              Testdruck
+            </Button>
+            <Button type="button" size="touch" onClick={handleSave}>
+              Speichern
+            </Button>
+            <Button type="button" variant="secondary" size="touch" onClick={() => setOpen(false)}>
+              Schließen
+            </Button>
+          </div>
+        </TouchDialog>
       )}
     </>
   );
