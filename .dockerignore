@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+terminal
+e2e
+.git
+test-results
+playwright-report
+docs
+.superpowers
