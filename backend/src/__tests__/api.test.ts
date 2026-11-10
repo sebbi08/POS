@@ -1,6 +1,6 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../db", () => ({
   getPool: vi.fn().mockReturnValue({
@@ -34,6 +34,7 @@ vi.mock("../config", () => ({
 const app = express();
 app.use(express.json());
 
+import { resetAdminAccessForTests } from "../api/middleware/auth.middleware.js";
 import authRoutes from "../api/routes/auth.routes.js";
 import companyRoutes from "../api/routes/company.routes.js";
 import orderRoutes from "../api/routes/orders.routes.js";
@@ -45,6 +46,12 @@ app.use("/api/auth", authRoutes);
 app.use("/api/terminals", terminalsRoutes);
 app.use("/api/company", companyRoutes);
 app.use("/api/orders", orderRoutes);
+
+// Several tests send wrong or missing admin PINs; the shared lockout must not
+// carry over between them.
+beforeEach(() => {
+  resetAdminAccessForTests();
+});
 
 describe("Auth Routes", () => {
   it("POST /api/auth/login with correct PIN returns admin role", async () => {

@@ -1,0 +1,181 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  latestReleaseTag,
+  bumpType,
+  nextVersion,
+  changelogSection,
+  extractSection,
+} from './conventional.mjs';
+import { findRun } from './ci-wait.mjs';
+import { rollback, tagIsPublished } from './rollback.mjs';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const changelogPath = join(root, 'CHANGELOG.md');
+const packageDirs = ['.', 'backend', 'frontend', 'terminal'];
+
+// Set once local changes start (after the CI gate): undoes them on failure.
+let cleanup = null;
+
+function fail(message) {
+  console.error(`release aborted: ${message}`);
+  const undo = cleanup;
+  cleanup = null;
+  if (undo) undo();
+  process.exit(1);
+}
+
+function run(cmd, args, opts = {}) {
+  try {
+    return execFileSync(cmd, args, { cwd: root, encoding: 'utf8', ...opts });
+  } catch (err) {
+    fail(`\`${cmd} ${args.join(' ')}\` failed: ${err.message}`);
+  }
+}
+
+const git = (...args) => run('git', args).trim();
+// Throws instead of calling fail(); used while cleaning up.
+const gitRaw = (...args) =>
+  execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: 'pipe' }).trim();
+
+const [first, second] = process.argv.slice(2);
+
+if (first === 'notes') {
+  if (!second) fail('usage: release.mjs notes vX.Y.Z');
+  const section = existsSync(changelogPath)
+    ? extractSection(readFileSync(changelogPath, 'utf8'), second)
+    : null;
+  if (section === null) fail(`no changelog section for ${second}`);
+  console.log(section);
+  process.exit(0);
+}
+
+const dryRun = first === '--dry-run';
+if (first && !dryRun) fail(`unknown argument: ${first}`);
+
+// 1. Preconditions
+git('fetch', 'origin', '--tags', '--prune');
+const problems = [];
+const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
+if (branch !== 'master') problems.push(`must be on master (on ${branch})`);
+// Untracked files are fine: only named files are added to the release commit.
+if (git('status', '--porcelain', '--untracked-files=no') !== '') {
+  problems.push('working tree has uncommitted changes to tracked files');
+}
+const head = git('rev-parse', 'HEAD');
+if (head !== git('rev-parse', 'origin/master')) problems.push('HEAD differs from origin/master');
+for (const problem of problems) {
+  if (dryRun) console.warn(`warning (dry run): ${problem}`);
+  else fail(problem);
+}
+
+// 2. Bump
+const tag = latestReleaseTag(git('tag', '--list', 'v*').split('\n').filter(Boolean));
+if (!tag) fail('no previous release tag (vX.Y.Z) found');
+const commits = git('log', `${tag}..HEAD`, '--format=%H%x1f%s%x1f%b%x1e')
+  .split('\x1e')
+  .map((r) => r.replace(/^\n/, ''))
+  .filter((r) => r.trim() !== '')
+  .map((r) => {
+    const [hash, subject, body = ''] = r.split('\x1f');
+    return { hash, subject, body: body.trim() };
+  });
+const bump = bumpType(commits);
+if (!bump) {
+  console.log('Nothing to release');
+  process.exit(0);
+}
+
+// 3. Version + notes
+const version = nextVersion(tag.slice(1), bump);
+const date = new Date().toISOString().slice(0, 10);
+const section = changelogSection(`v${version}`, date, commits);
+console.log(`${tag} -> v${version} (${bump})\n`);
+console.log(version);
+console.log(`\n${section}`);
+if (dryRun) process.exit(0);
+
+// 4. CI gate
+const listRuns = async () =>
+  JSON.parse(
+    run('gh', [
+      'run', 'list', '--workflow', 'ci.yml', '--branch', 'master', '--event', 'push', '--commit', head,
+      '--json', 'databaseId,status,conclusion',
+    ]) || '[]',
+  );
+const ci = await findRun(listRuns, {
+  attempts: 12,
+  delayMs: 5000,
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+});
+if (!ci) fail(`no CI run for ${head}`);
+try {
+  execFileSync('gh', ['run', 'watch', String(ci.databaseId), '--exit-status'], {
+    cwd: root,
+    stdio: 'inherit',
+  });
+} catch {
+  fail('CI failed on master');
+}
+
+// 5. Local changes: bump, changelog, commit, tag
+const newTag = `v${version}`;
+const changelogExisted = existsSync(changelogPath);
+let pushStarted = false;
+cleanup = () => {
+  if (pushStarted) {
+    let published = false;
+    try {
+      published = tagIsPublished(gitRaw, newTag);
+    } catch {
+      // Remote unreachable: the push cannot have gone through either way we
+      // can tell, and rolling back is recoverable (the next run fetches).
+    }
+    if (published) {
+      console.error(`\n${newTag} is on GitHub, so the release went out. Nothing was undone.`);
+      return;
+    }
+  }
+  try {
+    rollback({ git: gitRaw, root, baseCommit: head, tag: newTag, changelogExisted });
+    console.error(`\nRolled back: no release commit, no ${newTag} tag, versions and CHANGELOG.md as before.`);
+    console.error('Fix the cause and run `npm run release` again.');
+  } catch (err) {
+    console.error(`\nAutomatic rollback failed (${err.message}). Undo by hand:`);
+    console.error(
+      `  ${changelogExisted ? '' : 'rm -f CHANGELOG.md && '}git reset --hard ${head} && git tag -d ${newTag}`,
+    );
+  }
+};
+process.on('SIGINT', () => fail('interrupted'));
+for (const dir of packageDirs) {
+  run('npm', ['version', version, '--no-git-tag-version', '--allow-same-version'], {
+    cwd: join(root, dir),
+  });
+}
+const existing = changelogExisted
+  ? readFileSync(changelogPath, 'utf8')
+  : '# Changelog\n';
+const rest = existing.replace(/^# Changelog\n*/, '');
+try {
+  writeFileSync(changelogPath, `# Changelog\n\n${section}\n${rest ? `${rest}` : ''}`);
+} catch (err) {
+  fail(`writing CHANGELOG.md failed: ${err.message}`);
+}
+const files = packageDirs.flatMap((d) => [
+  join(d, 'package.json'),
+  join(d, 'package-lock.json'),
+]);
+git('add', ...files, 'CHANGELOG.md');
+git('commit', '-m', `chore(release): ${newTag}`);
+git('tag', '-a', newTag, '-m', newTag);
+
+// 6. Publish
+pushStarted = true;
+git('push', '--atomic', 'origin', 'master', newTag);
+cleanup = null;
+console.log(`\nReleased ${newTag}. Check the pipeline with:`);
+console.log('  gh run list --workflow release.yml -L1');

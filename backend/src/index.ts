@@ -1,10 +1,11 @@
 import cors from "cors";
 import express from "express";
-import { config } from "./config.js";
+import { assertProductionConfig, config } from "./config.js";
 import { initTables } from "./db.js";
 import { initAuthProjections } from "./modules/auth/auth.projections.js";
 import { initOrderProjections } from "./modules/orders/orders.projections.js";
 import { startProjections } from "./projections/runner.js";
+import { mountFrontend } from "./static.js";
 
 import authRoutes from "./api/routes/auth.routes.js";
 import catalogRoutes from "./api/routes/catalog.routes.js";
@@ -15,6 +16,8 @@ import syncRoutes from "./api/routes/sync.routes.js";
 import terminalsRoutes from "./api/routes/terminals.routes.js";
 import versionRoutes from "./api/routes/version.routes.js";
 
+assertProductionConfig(process.env);
+
 const startupLog = (msg: string) =>
   console.log(`[backend:startup] ${msg}  (${new Date().toISOString()})`);
 
@@ -23,6 +26,9 @@ startupLog(
 );
 
 const app = express();
+// The production image runs behind one reverse proxy: req.ip (the admin PIN
+// lockout key) must be the client's address, not the proxy's.
+if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
 app.use(cors());
 // Mounted before the global JSON parser: the sync router parses its own,
 // larger bodies (a whole festival of bookings) after the terminal key check.
@@ -40,6 +46,7 @@ app.use("/api/orders", ordersRoutes);
 app.use("/api/terminals", terminalsRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api/company", companyRoutes);
+mountFrontend(app, config.staticDir);
 
 startupLog("Registering projections…");
 const projStart = Date.now();

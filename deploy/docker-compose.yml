@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pos
+      POSTGRES_DB: pos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: ghcr.io/sebbi08/pos:${POS_TAG:-latest}
+    restart: unless-stopped
+    # Node runs as PID 1 without a SIGTERM handler; tini forwards signals.
+    init: true
+    ports:
+      - "${POS_BIND:-127.0.0.1}:${POS_PORT:-3001}:3001"
+    environment:
+      DATABASE_URL: postgresql://pos:${POSTGRES_PASSWORD}@postgres:5432/pos
+      ADMIN_PIN: ${ADMIN_PIN:?set ADMIN_PIN in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  pg-data:

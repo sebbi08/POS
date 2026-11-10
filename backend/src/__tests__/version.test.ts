@@ -12,7 +12,7 @@ describe("shared version", () => {
     const versions = ["", "backend/", "frontend/", "terminal/"].map(
       (dir) => JSON.parse(readFileSync(`${root}${dir}package.json`, "utf8")).version,
     );
-    expect([...new Set(versions)]).toEqual(["0.2.0"]);
+    expect(new Set(versions).size).toBe(1);
   });
 
   it("GET /api/version returns the backend version", async () => {
@@ -20,6 +20,9 @@ describe("shared version", () => {
     app.use("/api/version", versionRoutes);
     const res = await request(app).get("/api/version");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ version: "0.2.0" });
+    const { version } = JSON.parse(
+      readFileSync(`${root}backend/package.json`, "utf8"),
+    );
+    expect(res.body).toEqual({ version });
   });
 });
