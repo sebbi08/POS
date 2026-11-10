@@ -7,9 +7,10 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "cd backend && npx vitest run && cd ../frontend && npx vitest run && cd ../terminal && npx vitest run",
+    "test": "cd backend && npx vitest run && cd ../frontend && npx vitest run && cd ../terminal && npx vitest run && cd .. && node --test \"scripts/**/*.test.mjs\"",
     "test:e2e": "date && time npx playwright test && date",
-    "prepare": "husky"
+    "prepare": "husky",
+    "release": "node scripts/release/release.mjs"
   },
   "keywords": [],
   "author": "",
