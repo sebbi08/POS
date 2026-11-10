@@ -17,8 +17,10 @@ services:
   app:
     image: ghcr.io/sebbi08/pos:${POS_TAG:-latest}
     restart: unless-stopped
+    # Node runs as PID 1 without a SIGTERM handler; tini forwards signals.
+    init: true
     ports:
-      - "${POS_PORT:-3001}:3001"
+      - "${POS_BIND:-127.0.0.1}:${POS_PORT:-3001}:3001"
     environment:
       DATABASE_URL: postgresql://pos:${POSTGRES_PASSWORD}@postgres:5432/pos
       ADMIN_PIN: ${ADMIN_PIN:?set ADMIN_PIN in .env}
