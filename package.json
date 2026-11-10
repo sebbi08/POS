@@ -8,13 +8,17 @@
   },
   "scripts": {
     "test": "cd backend && npx vitest run && cd ../frontend && npx vitest run && cd ../terminal && npx vitest run",
-    "test:e2e": "date && time npx playwright test && date"
+    "test:e2e": "date && time npx playwright test && date",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
     "@playwright/test": "^1.65.0",
-    "@types/node": "^26.6.6"
+    "@types/node": "^26.6.6",
+    "husky": "^9.1.7"
   }
 }
