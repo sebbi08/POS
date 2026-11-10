@@ -10,7 +10,8 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
