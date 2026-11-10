@@ -12,6 +12,7 @@ permissions:
 jobs:
   commitlint:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,15 +31,22 @@ jobs:
         env:
           BEFORE: ${{ github.event.before }}
         run: |
-          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            # New branch: check everything since it diverged from master.
-            npx commitlint --from origin/master --to "$GITHUB_SHA"
-          else
-            npx commitlint --from "$BEFORE" --to "$GITHUB_SHA"
+          FROM="$BEFORE"
+          if [ "$FROM" = "0000000000000000000000000000000000000000" ] \
+            || ! git cat-file -e "$FROM^{commit}" 2>/dev/null; then
+            # New branch, or a force-push made the old head unreachable:
+            # check everything since the branch diverged from master.
+            FROM=origin/master
           fi
+          if [ "$(git rev-list --count "$FROM..$GITHUB_SHA")" = "0" ]; then
+            echo "No new commits in $FROM..$GITHUB_SHA, nothing to lint."
+            exit 0
+          fi
+          npx commitlint --from "$FROM" --to "$GITHUB_SHA"
 
   unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -70,12 +78,14 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - run: docker build .
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -98,7 +108,7 @@ jobs:
         run: |
           docker compose up -d postgres
           for _ in $(seq 1 30); do
-            docker compose exec -T postgres pg_isready -U pos && exit 0
+            docker compose exec -T postgres pg_isready -U pos -h 127.0.0.1 && exit 0
             sleep 2
           done
           echo "Postgres did not become ready"
@@ -107,8 +117,11 @@ jobs:
       - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: npx playwright install --with-deps chromium
       - run: xvfb-run -a npx playwright test
-      - uses: actions/upload-artifact@v4
-        if: failure()
+      - uses: actions/upload-artifact@v7
+        if: ${{ failure() }}
         with:
           name: test-results
-          path: test-results/
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
