@@ -89,7 +89,7 @@ if (dryRun) process.exit(0);
 const listRuns = async () =>
   JSON.parse(
     run('gh', [
-      'run', 'list', '--workflow', 'ci.yml', '--commit', head,
+      'run', 'list', '--workflow', 'ci.yml', '--branch', 'master', '--event', 'push', '--commit', head,
       '--json', 'databaseId,status,conclusion',
     ]) || '[]',
   );
