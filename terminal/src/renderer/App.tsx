@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import CancelList from "./components/CancelList";
 import CheckoutDialog from "./components/CheckoutDialog";
 import ItemGrid from "./components/ItemGrid";
@@ -21,12 +22,14 @@ export default function App() {
   }, []);
 
   if (storeError === undefined) {
-    return <main className="min-h-screen flex items-center justify-center text-gray-400">Lade …</main>;
+    return <main className="min-h-screen flex items-center justify-center text-muted-foreground">Lade …</main>;
   }
   if (storeError !== null) {
     return (
-      <main role="alert" className="min-h-screen flex items-center justify-center p-8 text-center text-2xl font-semibold text-red-300">
-        {storeError}
+      <main className="min-h-screen flex items-center justify-center p-8">
+        <Alert variant="destructive" className="max-w-3xl">
+          <AlertDescription className="justify-items-center text-center text-2xl font-semibold">{storeError}</AlertDescription>
+        </Alert>
       </main>
     );
   }
@@ -50,7 +53,7 @@ function Till() {
     return (
       <div className="min-h-screen flex flex-col">
         {messageBar}
-        <main className="flex-1 flex items-center justify-center text-gray-400">Lade …</main>
+        <main className="flex-1 flex items-center justify-center text-muted-foreground">Lade …</main>
       </div>
     );
   }
@@ -102,7 +105,7 @@ function Till() {
         onToggleFullScreen={fullScreen.toggle}
       />
       {t.clockWarning && (
-        <div role="alert" className="bg-yellow-400 text-gray-900 font-semibold px-4 py-3">{t.clockWarning}</div>
+        <Alert role="alert" className="block rounded-none border-x-0 border-t-0 bg-yellow-400 text-gray-900 font-semibold text-base">{t.clockWarning}</Alert>
       )}
       {messageBar}
 

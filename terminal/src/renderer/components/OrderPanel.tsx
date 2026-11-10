@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { LocalOrder } from "../domain/orders";
 import { euro } from "./format";
 
@@ -11,107 +14,118 @@ interface Props {
   onDiscard: () => void;
 }
 
+/** Radix sizes the viewport content as a table, which would stop long names from truncating. */
+const LINES_FIT_WIDTH = "[&_[data-slot=scroll-area-viewport]>div]:block!";
+
 function OrderPanel({ order, disabled, onChangeQty, onRemoveLine, onPay, onDiscard }: Props) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   if (!order) {
     return (
-      <section aria-label="Bestellung" className="h-full bg-gray-800 rounded-xl p-4 flex items-center justify-center text-gray-500 text-center">
-        Keine offene Bestellung. Artikel antippen zum Starten.
+      <section aria-label="Bestellung" className="h-full">
+        <Card className="h-full p-4 items-center justify-center text-muted-foreground text-center">
+          Keine offene Bestellung. Artikel antippen zum Starten.
+        </Card>
       </section>
     );
   }
 
   return (
-    <section aria-label="Bestellung" className="h-full bg-gray-800 rounded-xl p-4 flex flex-col">
-      <h2 className="text-white font-bold text-lg mb-3">Bestellung #{order.id.slice(0, 8)}</h2>
+    <section aria-label="Bestellung" className="h-full">
+      <Card className="h-full gap-3 p-4">
+        <h2 className="font-bold text-lg">Bestellung #{order.id.slice(0, 8)}</h2>
 
-      <div className="flex-1 overflow-y-auto mb-3">
-        {order.lines.map((line) => (
-          <div key={line.itemId} className="flex items-center justify-between bg-gray-700 rounded-lg p-3 mb-2">
-            <div className="flex-1 min-w-0">
-              <div className="text-white font-medium truncate">{line.name}</div>
-              <div className="flex items-center gap-2 mt-2">
-                <button
-                  onClick={() => onChangeQty(line.itemId, -1)}
+        {/* type="auto": the scrollbar shows whenever lines overflow, not only on hover */}
+        <ScrollArea type="auto" className={`flex-1 min-h-0 ${LINES_FIT_WIDTH}`}>
+          <div className="space-y-2">
+            {order.lines.map((line) => (
+              <div key={line.itemId} className="flex items-center justify-between gap-2 bg-muted rounded-lg p-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate">{line.name}</div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="touch"
+                      onClick={() => onChangeQty(line.itemId, -1)}
+                      disabled={disabled}
+                      className="text-lg"
+                      aria-label="Menge verringern"
+                    >
+                      −
+                    </Button>
+                    <span className="font-bold w-8 text-center">{line.qty}</span>
+                    <Button
+                      variant="outline"
+                      size="touch"
+                      onClick={() => onChangeQty(line.itemId, 1)}
+                      disabled={disabled}
+                      className="text-lg"
+                      aria-label="Menge erhöhen"
+                    >
+                      +
+                    </Button>
+                    <span className="text-muted-foreground text-sm ml-1">× {euro(line.unitPrice)}</span>
+                  </div>
+                </div>
+                <div className="font-bold">{euro(line.total)}</div>
+                <Button
+                  variant="outline"
+                  size="touch"
+                  onClick={() => onRemoveLine(line.itemId)}
                   disabled={disabled}
-                  className="bg-gray-600 hover:bg-gray-500 disabled:opacity-60 text-white text-lg w-10 h-10 rounded flex items-center justify-center transition-colors"
-                  aria-label="Menge verringern"
+                  className="text-destructive text-xl"
+                  aria-label="Artikel entfernen"
                 >
-                  −
-                </button>
-                <span className="text-white font-bold w-8 text-center">{line.qty}</span>
-                <button
-                  onClick={() => onChangeQty(line.itemId, 1)}
-                  disabled={disabled}
-                  className="bg-gray-600 hover:bg-gray-500 disabled:opacity-60 text-white text-lg w-10 h-10 rounded flex items-center justify-center transition-colors"
-                  aria-label="Menge erhöhen"
-                >
-                  +
-                </button>
-                <span className="text-gray-400 text-sm ml-1">× {euro(line.unitPrice)}</span>
+                  ×
+                </Button>
               </div>
+            ))}
+            {order.lines.length === 0 && (
+              <div className="text-muted-foreground text-center py-4">Artikel links antippen</div>
+            )}
+          </div>
+        </ScrollArea>
+
+        <div className="border-t pt-3">
+          <div className="flex justify-between font-bold text-xl">
+            <span>Summe</span>
+            <span>{euro(order.totalGross)}</span>
+          </div>
+        </div>
+
+        {confirmDiscard ? (
+          <div className="bg-background rounded-lg p-3">
+            <p className="text-center font-semibold mb-3">Bestellung verwerfen?</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="destructive"
+                size="touch-lg"
+                onClick={() => { setConfirmDiscard(false); onDiscard(); }}
+                disabled={disabled}
+              >
+                Ja, verwerfen
+              </Button>
+              <Button variant="secondary" size="touch-lg" onClick={() => setConfirmDiscard(false)}>
+                Abbrechen
+              </Button>
             </div>
-            <div className="text-white font-bold mr-2">{euro(line.total)}</div>
-            <button
-              onClick={() => onRemoveLine(line.itemId)}
-              disabled={disabled}
-              className="text-red-400 hover:text-red-300 disabled:opacity-60 text-xl w-10 h-10 rounded flex items-center justify-center hover:bg-gray-600 transition-colors"
-              aria-label="Artikel entfernen"
-            >
-              ×
-            </button>
           </div>
-        ))}
-        {order.lines.length === 0 && (
-          <div className="text-gray-500 text-center py-4">Artikel links antippen</div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            <Button variant="destructive" size="touch" onClick={() => setConfirmDiscard(true)} disabled={disabled} className="font-semibold">
+              Verwerfen
+            </Button>
+            <Button
+              size="touch-lg"
+              onClick={onPay}
+              disabled={disabled || order.lines.length === 0}
+              className="col-span-2"
+            >
+              Bezahlen & Drucken
+            </Button>
+          </div>
         )}
-      </div>
-
-      <div className="border-t border-gray-700 pt-3 mb-3">
-        <div className="flex justify-between text-white font-bold text-xl">
-          <span>Summe</span>
-          <span>{euro(order.totalGross)}</span>
-        </div>
-      </div>
-
-      {confirmDiscard ? (
-        <div className="bg-gray-900 rounded-lg p-3">
-          <p className="text-white text-center font-semibold mb-3">Bestellung verwerfen?</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => { setConfirmDiscard(false); onDiscard(); }}
-              disabled={disabled}
-              className="bg-red-700 hover:bg-red-600 disabled:opacity-60 text-white rounded-lg py-3 font-semibold"
-            >
-              Ja, verwerfen
-            </button>
-            <button
-              onClick={() => setConfirmDiscard(false)}
-              className="bg-gray-700 hover:bg-gray-600 text-white rounded-lg py-3 font-semibold"
-            >
-              Abbrechen
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={() => setConfirmDiscard(true)}
-            disabled={disabled}
-            className="bg-red-900 hover:bg-red-800 disabled:opacity-60 text-red-300 rounded-lg py-4 font-semibold"
-          >
-            Verwerfen
-          </button>
-          <button
-            onClick={onPay}
-            disabled={disabled || order.lines.length === 0}
-            className="col-span-2 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white rounded-lg py-4 text-lg font-bold"
-          >
-            Bezahlen & Drucken
-          </button>
-        </div>
-      )}
+      </Card>
     </section>
   );
 }

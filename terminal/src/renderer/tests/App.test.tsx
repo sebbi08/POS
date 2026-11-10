@@ -55,6 +55,13 @@ const click = (name: string | RegExp) => fireEvent.click(screen.getByRole("butto
 const APP_VERSION = "0.2.0";
 const AUTH = { pin: "0000", appVersion: APP_VERSION };
 
+/** Till controls are at least 48 px high: touch sizes, item tiles or keypad keys. */
+const TOUCH_SIZE = /(^|\s)(min-h-12|min-h-16|min-h-24|h-14)(\s|$)/;
+function expectTouchSized(buttons: HTMLElement[]) {
+  const tooSmall = buttons.filter((b) => !TOUCH_SIZE.test(b.className)).map((b) => b.textContent || b.getAttribute("aria-label"));
+  expect(tooSmall).toEqual([]);
+}
+
 /** Taps the given keys (digits, „Komma“, …) on the keypad of a dialog. */
 function tapKeys(dialog: HTMLElement, keys: string[]) {
   for (const name of keys) fireEvent.click(within(dialog).getByRole("button", { name }));
@@ -622,6 +629,46 @@ describe("App", () => {
     const printer = { vendorId: 0x416, productId: 0x5011, name: "TM-T88V (0x416:0x5011)" };
     await waitFor(() => expect(fake.bridge.saveSettings).toHaveBeenCalledWith({ ...settings, printer }));
     expect(await screen.findByText(/TM-T88V \(0x416:0x5011\) · 80 mm/)).toBeInTheDocument();
+  });
+
+  it("every button on the till is touch-sized", async () => {
+    setup({ settings, catalog, events: openOrderEvents });
+    await waitFor(() => expect(within(orderPanel()).getByText("Bier")).toBeInTheDocument());
+    // A failed save puts a dismissable message on screen as well.
+    fake.bridge.appendEvents.mockRejectedValueOnce(new Error("EIO"));
+    click(/Bratwurst/);
+    await screen.findByText("Speichern fehlgeschlagen – bitte erneut versuchen");
+    expect(screen.getByRole("button", { name: "Meldung schließen" })).toBeInTheDocument();
+    expectTouchSized(screen.getAllByRole("button"));
+
+    click("Verwerfen");
+    expect(screen.getByRole("button", { name: "Ja, verwerfen" })).toBeInTheDocument();
+    expectTouchSized(screen.getAllByRole("button"));
+  });
+
+  it("every button in the setup is touch-sized", async () => {
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }]);
+    setup({});
+    fireEvent.change(await screen.findByLabelText("Serveradresse"), { target: { value: "kasse.example" } });
+    click("Terminals laden");
+    await screen.findByRole("button", { name: "Theke 1" });
+    expectTouchSized(screen.getAllByRole("button"));
+  });
+
+  it("closing Druckereinstellungen and then Einstellungen leaves the till usable", async () => {
+    setup({ settings, catalog });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    fireEvent.click(screen.getByLabelText("Druckereinstellungen"));
+    const printerDialog = screen.getByRole("dialog", { name: "Druckereinstellungen" });
+    fireEvent.click(within(printerDialog).getByRole("button", { name: "Schließen" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Druckereinstellungen" })).not.toBeInTheDocument());
+    const settingsDialog = screen.getByRole("dialog", { name: "Einstellungen" });
+    fireEvent.click(within(settingsDialog).getByRole("button", { name: "Schließen" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await waitFor(() => expect(document.body.style.pointerEvents).toBe(""));
+    click(/Bier/);
+    await waitFor(() => expect(within(orderPanel()).getByText("Bier")).toBeInTheDocument());
   });
 
   it("quick double tap on an item opens one order with qty 2", async () => {

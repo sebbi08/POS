@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import type { Digit, KeypadKey } from "../domain/keypad-entry";
 
 interface Props {
@@ -9,9 +10,13 @@ interface Props {
 
 const DIGITS: Digit[] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
-const KEY = "h-14 rounded-lg text-white text-2xl font-semibold select-none touch-manipulation";
-const DIGIT_KEY = `${KEY} bg-gray-700 hover:bg-gray-600 active:bg-gray-500`;
-const FN_KEY = `${KEY} bg-gray-600 hover:bg-gray-500 active:bg-gray-400`;
+/** Tap feedback: a touch screen has no hover. */
+const KEY = "rounded-lg font-semibold active:brightness-125";
+
+/** A keypad key; function keys (comma, clear, backspace) stand apart from the digits. */
+function Key({ fn = false, ...props }: { fn?: boolean; onClick: () => void; "aria-label"?: string; children: ReactNode }) {
+  return <Button type="button" size="key" variant={fn ? "outline" : "secondary"} className={KEY} {...props} />;
+}
 
 /** Maps a hardware key to a keypad key; null if it means nothing here. */
 function fromKeyboard(e: KeyboardEvent, extraKey: Props["extraKey"]): KeypadKey | null {
@@ -39,15 +44,15 @@ function Keypad({ onKey, extraKey }: Props) {
   return (
     <div className="grid grid-cols-3 gap-2">
       {DIGITS.map((d) => (
-        <button key={d} type="button" onClick={() => onKey(d)} className={DIGIT_KEY}>{d}</button>
+        <Key key={d} onClick={() => onKey(d)}>{d}</Key>
       ))}
       {extraKey === "," ? (
-        <button type="button" aria-label="Komma" onClick={() => onKey(",")} className={FN_KEY}>,</button>
+        <Key fn aria-label="Komma" onClick={() => onKey(",")}>,</Key>
       ) : (
-        <button type="button" aria-label="Alles löschen" onClick={() => onKey("clear")} className={FN_KEY}>C</button>
+        <Key fn aria-label="Alles löschen" onClick={() => onKey("clear")}>C</Key>
       )}
-      <button type="button" onClick={() => onKey("0")} className={DIGIT_KEY}>0</button>
-      <button type="button" aria-label="Letzte Ziffer löschen" onClick={() => onKey("back")} className={FN_KEY}>⌫</button>
+      <Key onClick={() => onKey("0")}>0</Key>
+      <Key fn aria-label="Letzte Ziffer löschen" onClick={() => onKey("back")}>⌫</Key>
     </div>
   );
 }

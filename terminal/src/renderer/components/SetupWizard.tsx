@@ -1,4 +1,9 @@
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { TerminalSettings } from "../../shared/types";
 import { syncErrorText, TERMINAL_LOCKED } from "../state/messages";
 import { listTerminals, normalizeServerUrl } from "../sync/client";
@@ -13,6 +18,9 @@ interface Props {
   /** Only offered when there is a working setup to return to. */
   onCancel?: () => void;
 }
+
+/** Text fields as tall as the touch buttons next to them. */
+const FIELD = "h-16 text-lg md:text-lg";
 
 const DEFAULTS = { changeCalculator: false, printer: null, paperWidth: "80" } as const;
 
@@ -78,80 +86,84 @@ function SetupWizard({ initial, lockedTerminalId = null, onSetup, onCancel }: Pr
 
   return (
     <main className="flex-1 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-xl p-6 w-[32rem] shadow-2xl space-y-5">
-        <h1 className="text-white text-2xl font-bold">Terminal einrichten</h1>
+      <Card className="w-[32rem] shadow-2xl">
+        <CardHeader>
+          <h1 className="text-2xl font-bold">Terminal einrichten</h1>
+        </CardHeader>
 
-        <div>
-          <label htmlFor="setup-server" className="text-gray-400 text-sm block mb-1">Serveradresse</label>
-          <div className="flex gap-2">
-            <input
-              id="setup-server"
-              value={address}
-              onChange={(e) => changeAddress(e.target.value)}
-              placeholder="kasse.example.de"
-              className="flex-1 bg-gray-700 text-white rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              onClick={loadTerminals}
-              disabled={working}
-              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg px-4 font-semibold"
-            >
-              Terminals laden
-            </button>
-          </div>
-        </div>
-
-        {terminals && terminals.length > 0 && (
-          <div>
-            <span className="text-gray-400 text-sm block mb-1">Welches Terminal ist dieses Gerät?</span>
-            <div className="grid grid-cols-2 gap-2">
-              {terminals.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => chooseTerminal(t.id)}
-                  aria-pressed={terminalId === t.id}
-                  className={`rounded-lg py-3 px-2 font-semibold text-white ${terminalId === t.id ? "bg-blue-600" : "bg-gray-700 hover:bg-gray-600"}`}
-                >
-                  {t.name}
-                </button>
-              ))}
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="setup-server" className="text-muted-foreground">Serveradresse</Label>
+            <div className="flex gap-2">
+              <Input
+                id="setup-server"
+                value={address}
+                onChange={(e) => changeAddress(e.target.value)}
+                placeholder="kasse.example.de"
+                className={`flex-1 ${FIELD}`}
+              />
+              <Button size="touch-lg" onClick={loadTerminals} disabled={working}>
+                Terminals laden
+              </Button>
             </div>
           </div>
-        )}
 
-        {terminalId && (
-          <div>
-            <label htmlFor="setup-key" className="text-gray-400 text-sm block mb-1">Terminal-Schlüssel</label>
-            <input
-              id="setup-key"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              autoComplete="off"
-              className="w-full bg-gray-700 text-white rounded-lg px-3 py-3 font-mono outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        )}
-
-        {error && <div role="alert" className="bg-red-500/20 text-red-300 rounded-lg p-2 text-sm">{error}</div>}
-
-        <div className="flex gap-2">
-          <button
-            onClick={submit}
-            disabled={working || !terminalId || !key.trim()}
-            className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white rounded-lg py-3 font-bold"
-          >
-            Einrichten & Artikel abholen
-          </button>
-          {onCancel && (
-            <button
-              onClick={onCancel}
-              className="bg-gray-700 hover:bg-gray-600 text-white rounded-lg px-4 font-semibold"
-            >
-              Abbrechen
-            </button>
+          {terminals && terminals.length > 0 && (
+            <div className="space-y-2">
+              <span className="text-muted-foreground text-sm block">Welches Terminal ist dieses Gerät?</span>
+              <div className="grid grid-cols-2 gap-2">
+                {terminals.map((t) => (
+                  <Button
+                    key={t.id}
+                    variant={terminalId === t.id ? "default" : "secondary"}
+                    size="touch-lg"
+                    onClick={() => chooseTerminal(t.id)}
+                    aria-pressed={terminalId === t.id}
+                    className="whitespace-normal"
+                  >
+                    {t.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
           )}
-        </div>
-      </div>
+
+          {terminalId && (
+            <div className="space-y-2">
+              <Label htmlFor="setup-key" className="text-muted-foreground">Terminal-Schlüssel</Label>
+              <Input
+                id="setup-key"
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                autoComplete="off"
+                className={`font-mono ${FIELD}`}
+              />
+            </div>
+          )}
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              size="touch-lg"
+              onClick={submit}
+              disabled={working || !terminalId || !key.trim()}
+              className="flex-1"
+            >
+              Einrichten & Artikel abholen
+            </Button>
+            {onCancel && (
+              <Button variant="secondary" size="touch-lg" onClick={onCancel}>
+                Abbrechen
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </main>
   );
 }

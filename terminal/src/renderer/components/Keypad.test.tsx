@@ -31,6 +31,11 @@ describe("Keypad", () => {
     for (const b of screen.getAllByRole("button")) expect(b).toHaveAttribute("type", "button");
   });
 
+  it("every key is a large touch key", () => {
+    render(<Keypad onKey={() => {}} extraKey="," />);
+    for (const b of screen.getAllByRole("button")) expect(b).toHaveClass("h-14", "touch-manipulation");
+  });
+
   it("a hardware keyboard works too", () => {
     const onKey = vi.fn();
     render(<Keypad onKey={onKey} extraKey="," />);

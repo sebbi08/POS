@@ -1,3 +1,5 @@
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import type { Message } from "../state/messages";
 
 interface Props {
@@ -9,13 +11,15 @@ function MessageBar({ message, onDismiss }: Props) {
   if (!message) return null;
   const error = message.kind === "error";
   return (
-    <div
+    <Alert
       role={error ? "alert" : "status"}
-      className={`flex items-center justify-between gap-4 px-4 py-3 ${error ? "bg-red-700 text-white" : "bg-green-700 text-white"}`}
+      className={`flex items-center justify-between gap-4 rounded-none border-x-0 border-t-0 py-1 text-base text-white ${error ? "bg-red-700" : "bg-green-700"}`}
     >
       <span>{message.text}</span>
-      <button onClick={onDismiss} aria-label="Meldung schließen" className="text-xl leading-none px-2">×</button>
-    </div>
+      <Button variant="ghost" size="touch" onClick={onDismiss} aria-label="Meldung schließen" className="text-xl">
+        ×
+      </Button>
+    </Alert>
   );
 }
 
