@@ -26,6 +26,9 @@ startupLog(
 );
 
 const app = express();
+// The production image runs behind one reverse proxy: req.ip (the admin PIN
+// lockout key) must be the client's address, not the proxy's.
+if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
 app.use(cors());
 // Mounted before the global JSON parser: the sync router parses its own,
 // larger bodies (a whole festival of bookings) after the terminal key check.
