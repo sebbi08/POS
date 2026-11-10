@@ -87,10 +87,10 @@ async function launch(dataDir: string): Promise<{ app: ElectronApplication; page
 
 const pinDialog = (page: Page) => page.getByRole("dialog", { name: "Admin-PIN" });
 
-/** Answers the „Admin-PIN“ dialog every sync asks for with the e2e server's PIN. */
+/** Answers the „Admin-PIN“ dialog every sync asks for with the e2e server's PIN, tapped on its keypad. */
 async function enterPin(page: Page): Promise<void> {
   const dialog = pinDialog(page);
-  await dialog.getByLabel("Admin-PIN").fill("0000");
+  for (const digit of "0000") await dialog.getByRole("button", { name: digit, exact: true }).click();
   await dialog.getByRole("button", { name: "OK" }).click();
   await expect(dialog).toBeHidden();
 }

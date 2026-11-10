@@ -55,10 +55,15 @@ const click = (name: string | RegExp) => fireEvent.click(screen.getByRole("butto
 const APP_VERSION = "0.2.0";
 const AUTH = { pin: "0000", appVersion: APP_VERSION };
 
-/** Waits for the „Admin-PIN“ dialog, types the PIN and confirms with OK. */
+/** Taps the given keys (digits, „Komma“, …) on the keypad of a dialog. */
+function tapKeys(dialog: HTMLElement, keys: string[]) {
+  for (const name of keys) fireEvent.click(within(dialog).getByRole("button", { name }));
+}
+
+/** Waits for the „Admin-PIN“ dialog, taps the PIN on its keypad and confirms with OK. */
 async function enterPin(pin = "0000") {
   const dialog = await screen.findByRole("dialog", { name: "Admin-PIN" });
-  fireEvent.change(within(dialog).getByLabelText("Admin-PIN"), { target: { value: pin } });
+  tapKeys(dialog, [...pin]);
   fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
 }
 
@@ -272,11 +277,11 @@ describe("App", () => {
     expect(within(dialog).getByText("Summe").parentElement).toHaveTextContent(/7,50\s€/);
     const rueckgeld = () => within(dialog).getByText("Rückgeld").parentElement;
 
-    fireEvent.change(within(dialog).getByLabelText("Gegeben"), { target: { value: "5" } });
+    tapKeys(dialog, ["5"]);
     expect(rueckgeld()).toHaveTextContent("Betrag reicht nicht");
-    fireEvent.change(within(dialog).getByLabelText("Gegeben"), { target: { value: "10,5" } });
+    tapKeys(dialog, ["Letzte Ziffer löschen", "1", "0", "Komma", "5"]);
     expect(rueckgeld()).toHaveTextContent(/3,00\s€/);
-    fireEvent.change(within(dialog).getByLabelText("Gegeben"), { target: { value: "10" } });
+    tapKeys(dialog, ["Letzte Ziffer löschen", "Letzte Ziffer löschen"]);
     expect(rueckgeld()).toHaveTextContent(/2,50\s€/);
     expect(fake.bridge.appendEvents).not.toHaveBeenCalled();
 
@@ -679,9 +684,6 @@ describe("Admin-PIN and version check", () => {
     await screen.findByRole("button", { name: /Bier/ });
     click("Artikel abholen");
     const dialog = await screen.findByRole("dialog", { name: "Admin-PIN" });
-    const input = within(dialog).getByLabelText("Admin-PIN");
-    expect(input).toHaveAttribute("type", "password");
-    expect(input).toHaveAttribute("inputmode", "numeric");
     expect(within(dialog).getByRole("button", { name: "OK" })).toBeDisabled();
     expect(fetchCatalog).not.toHaveBeenCalled();
     await enterPin("1234");
@@ -691,14 +693,13 @@ describe("Admin-PIN and version check", () => {
     expect(screen.queryByRole("dialog", { name: "Admin-PIN" })).not.toBeInTheDocument();
   });
 
-  it("Enter in the PIN field submits", async () => {
+  it("PIN typed on a hardware keyboard and Enter submits", async () => {
     vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 0 });
     setup({ settings, catalog });
     await screen.findByRole("button", { name: /Bier/ });
     click("Artikel abholen");
-    const input = within(await screen.findByRole("dialog", { name: "Admin-PIN" })).getByLabelText("Admin-PIN");
-    fireEvent.change(input, { target: { value: "4321" } });
-    fireEvent.submit(input);
+    await screen.findByRole("dialog", { name: "Admin-PIN" });
+    for (const key of ["4", "3", "2", "1", "Enter"]) fireEvent.keyDown(document, { key });
     await waitFor(() => expect(fetchCatalog).toHaveBeenCalledWith(settings, { pin: "4321", appVersion: APP_VERSION }));
   });
 
