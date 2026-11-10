@@ -11,17 +11,20 @@ import {
   extractSection,
 } from './conventional.mjs';
 import { findRun } from './ci-wait.mjs';
+import { rollback, tagIsPublished } from './rollback.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const changelogPath = join(root, 'CHANGELOG.md');
 const packageDirs = ['.', 'backend', 'frontend', 'terminal'];
 
-// Set once local changes start (after the CI gate): how to retry or undo.
-let recoveryHint = null;
+// Set once local changes start (after the CI gate): undoes them on failure.
+let cleanup = null;
 
 function fail(message) {
   console.error(`release aborted: ${message}`);
-  if (recoveryHint) console.error(`\n${recoveryHint}`);
+  const undo = cleanup;
+  cleanup = null;
+  if (undo) undo();
   process.exit(1);
 }
 
@@ -34,6 +37,9 @@ function run(cmd, args, opts = {}) {
 }
 
 const git = (...args) => run('git', args).trim();
+// Throws instead of calling fail(); used while cleaning up.
+const gitRaw = (...args) =>
+  execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: 'pipe' }).trim();
 
 const [first, second] = process.argv.slice(2);
 
@@ -118,13 +124,33 @@ try {
 // 5. Local changes: bump, changelog, commit, tag
 const newTag = `v${version}`;
 const changelogExisted = existsSync(changelogPath);
-recoveryHint = [
-  `Local release state for ${newTag} may be incomplete. To recover:`,
-  `  retry the push (if the release commit and tag exist):`,
-  `    git push --atomic origin master ${newTag}`,
-  `  or undo everything (git tag -d fails harmlessly if the tag was not created):`,
-  `    ${changelogExisted ? '' : 'rm -f CHANGELOG.md && '}git reset --hard origin/master && git tag -d ${newTag}`,
-].join('\n');
+let pushStarted = false;
+cleanup = () => {
+  if (pushStarted) {
+    let published = false;
+    try {
+      published = tagIsPublished(gitRaw, newTag);
+    } catch {
+      // Remote unreachable: the push cannot have gone through either way we
+      // can tell, and rolling back is recoverable (the next run fetches).
+    }
+    if (published) {
+      console.error(`\n${newTag} is on GitHub, so the release went out. Nothing was undone.`);
+      return;
+    }
+  }
+  try {
+    rollback({ git: gitRaw, root, baseCommit: head, tag: newTag, changelogExisted });
+    console.error(`\nRolled back: no release commit, no ${newTag} tag, versions and CHANGELOG.md as before.`);
+    console.error('Fix the cause and run `npm run release` again.');
+  } catch (err) {
+    console.error(`\nAutomatic rollback failed (${err.message}). Undo by hand:`);
+    console.error(
+      `  ${changelogExisted ? '' : 'rm -f CHANGELOG.md && '}git reset --hard ${head} && git tag -d ${newTag}`,
+    );
+  }
+};
+process.on('SIGINT', () => fail('interrupted'));
 for (const dir of packageDirs) {
   run('npm', ['version', version, '--no-git-tag-version', '--allow-same-version'], {
     cwd: join(root, dir),
@@ -148,7 +174,8 @@ git('commit', '-m', `chore(release): ${newTag}`);
 git('tag', '-a', newTag, '-m', newTag);
 
 // 6. Publish
+pushStarted = true;
 git('push', '--atomic', 'origin', 'master', newTag);
-recoveryHint = null;
+cleanup = null;
 console.log(`\nReleased ${newTag}. Check the pipeline with:`);
 console.log('  gh run list --workflow release.yml -L1');
