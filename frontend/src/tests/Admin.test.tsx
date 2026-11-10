@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { format } from "date-fns";
+import { de } from "date-fns/locale/de";
 import CatalogManager from "../components/CatalogManager";
 import AdminLayout from "../views/AdminLayout";
 import TransactionHistory from "../components/TransactionHistory";
@@ -40,6 +42,22 @@ vi.mock("../api/client", () => ({
 }));
 
 import { api } from "../api/client";
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const now = new Date();
+const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+// A day of the current month; the calendar opens on the month of the default range (today).
+const thisMonth = (d: number) => ({
+  iso: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(d)}`,
+  name: format(new Date(now.getFullYear(), now.getMonth(), d), "PPPP", { locale: de }),
+});
+
+// Opens the range picker and clicks two days of the current month.
+const pickDays = (first: number, second: number) => {
+  fireEvent.click(screen.getByRole("button", { name: /^Zeitraum: / }));
+  fireEvent.click(screen.getByRole("button", { name: thisMonth(first).name }));
+  fireEvent.click(screen.getByRole("button", { name: thisMonth(second).name }));
+};
 
 describe("CatalogManager", () => {
   beforeEach(() => {
@@ -134,7 +152,13 @@ describe("TransactionHistory", () => {
 
   const mockLists = (rows: unknown[]) => {
     vi.mocked(api.get).mockImplementation((path: string) =>
-      Promise.resolve(path.startsWith("/terminals") ? [{ id: "t1", name: "Bar", groupIds: [], printPickupReceipts: true }] : rows) as never,
+      Promise.resolve(
+        path.startsWith("/terminals")
+          ? [{ id: "t1", name: "Bar", groupIds: [], printPickupReceipts: true }]
+          : path === "/reporting/booking-days"
+            ? []
+            : rows,
+      ) as never,
     );
   };
 
@@ -153,10 +177,11 @@ describe("TransactionHistory", () => {
   it("requests the selected range", async () => {
     mockLists([]);
     render(<TransactionHistory />);
-    fireEvent.change(screen.getByLabelText("Von"), { target: { value: "2026-06-01" } });
-    fireEvent.change(screen.getByLabelText("Bis"), { target: { value: "2026-06-02" } });
+    pickDays(15, 13);
+    const from = thisMonth(13).iso;
+    const to = thisMonth(15).iso;
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith(expect.stringMatching(/^\/reporting\/transactions\?from=2026-06-01&to=2026-06-02(&|$)/));
+      expect(api.get).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^/reporting/transactions\\?from=${from}&to=${to}(&|$)`)));
     });
   });
 
@@ -185,12 +210,12 @@ describe("TransactionHistory", () => {
     const first = new Promise<unknown[]>((r) => { resolveFirst = r; });
     let call = 0;
     vi.mocked(api.get).mockImplementation((path: string) => {
-      if (path.startsWith("/terminals")) return Promise.resolve([]) as never;
+      if (path.startsWith("/terminals") || path === "/reporting/booking-days") return Promise.resolve([]) as never;
       call += 1;
       return (call === 1 ? first : Promise.resolve([cancelRow])) as never;
     });
     render(<TransactionHistory />);
-    fireEvent.change(screen.getByLabelText("Von"), { target: { value: "2026-06-01" } });
+    pickDays(13, 15);
     await screen.findByText("Storno zu #abc12345");
     resolveFirst([closedRow]);
     await new Promise((r) => setTimeout(r, 20));
@@ -217,7 +242,9 @@ describe("ReportOverview", () => {
       Promise.resolve(
         path.startsWith("/terminals")
           ? [{ id: "t1", name: "Bar", groupIds: [], printPickupReceipts: true }]
-          : report,
+          : path === "/reporting/booking-days"
+            ? [{ day: "2026-06-01", orderCount: 3 }, { day: "2026-06-02", orderCount: 4 }]
+            : report,
       ) as never,
     );
   };
@@ -226,20 +253,23 @@ describe("ReportOverview", () => {
     mockReport(emptyReport);
     render(<ReportOverview />);
     await screen.findByRole("heading", { name: "Auswertung" });
-    fireEvent.change(screen.getByLabelText("Von"), { target: { value: "2026-06-01" } });
-    fireEvent.change(screen.getByLabelText("Bis"), { target: { value: "2026-06-02" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Zeitraum: / }));
+    fireEvent.click(await screen.findByRole("button", { name: "1.–2. Juni 2026, 7 Buchungen" }));
     await waitFor(() => {
       expect(api.get).toHaveBeenCalledWith("/reporting/summary?from=2026-06-01&to=2026-06-02");
     });
+    // One festival click sets both ends at once: no request for a half-updated range.
+    const summaries = vi.mocked(api.get).mock.calls.filter(([p]) => p.startsWith("/reporting/summary"));
+    expect(summaries.map(([p]) => p)).toEqual([
+      `/reporting/summary?from=${today}&to=${today}`,
+      "/reporting/summary?from=2026-06-01&to=2026-06-02",
+    ]);
   });
 
   it("defaults both dates to today", async () => {
     mockReport(emptyReport);
     render(<ReportOverview />);
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    expect(screen.getByLabelText("Von")).toHaveValue(today);
-    expect(screen.getByLabelText("Bis")).toHaveValue(today);
+    expect(screen.getByRole("button", { name: `Zeitraum: ${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()}` })).toBeInTheDocument();
     await waitFor(() => expect(api.get).toHaveBeenCalledWith(`/reporting/summary?from=${today}&to=${today}`));
   });
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { formatEuro, todayIso } from "../lib/format";
 import { useTerminals } from "../lib/useTerminals";
-import RangeFields from "./RangeFields";
+import DateRangePicker from "./DateRangePicker";
 
 interface Transaction {
   orderId: string;
@@ -19,8 +19,10 @@ const inputClass = "bg-gray-800 text-white rounded px-3 py-2 text-sm border bord
 
 function TransactionHistory() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [from, setFrom] = useState(todayIso);
-  const [to, setTo] = useState(todayIso);
+  const [range, setRange] = useState(() => {
+    const today = todayIso();
+    return { from: today, to: today };
+  });
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [terminal, setTerminal] = useState("");
@@ -29,7 +31,7 @@ function TransactionHistory() {
   const { terminals, nameOf } = useTerminals();
 
   const query = () => {
-    const params = new URLSearchParams({ from, to });
+    const params = new URLSearchParams({ from: range.from, to: range.to });
     if (status !== "all") params.set("status", status);
     if (search) params.set("search", search);
     if (terminal) params.set("terminal", terminal);
@@ -53,7 +55,7 @@ function TransactionHistory() {
     return () => {
       stale = true;
     };
-  }, [from, to, status, search, terminal]);
+  }, [range, status, search, terminal]);
 
   const handleCancel = async (orderId: string) => {
     if (!window.confirm(`Buchung #${orderId.slice(0, 8)} wirklich stornieren?`)) return;
@@ -78,7 +80,7 @@ function TransactionHistory() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-white text-xl font-bold">Buchungen</h2>
-        <RangeFields from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
+        <DateRangePicker from={range.from} to={range.to} onChange={setRange} />
       </div>
 
       <div className="flex gap-2 mb-4">

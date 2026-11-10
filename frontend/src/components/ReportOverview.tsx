@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { formatEuro, todayIso } from "../lib/format";
 import { useTerminals } from "../lib/useTerminals";
-import RangeFields from "./RangeFields";
+import DateRangePicker from "./DateRangePicker";
 
 interface Report {
   from: string;
@@ -18,8 +18,10 @@ interface Report {
 }
 
 function ReportOverview() {
-  const [from, setFrom] = useState(todayIso);
-  const [to, setTo] = useState(todayIso);
+  const [range, setRange] = useState(() => {
+    const today = todayIso();
+    return { from: today, to: today };
+  });
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
   const { nameOf: terminalName } = useTerminals();
@@ -28,7 +30,7 @@ function ReportOverview() {
     let stale = false;
     setError("");
     api
-      .get<Report>(`/reporting/summary?from=${from}&to=${to}`)
+      .get<Report>(`/reporting/summary?from=${range.from}&to=${range.to}`)
       .then((r) => {
         if (!stale) setReport(r);
       })
@@ -41,13 +43,13 @@ function ReportOverview() {
     return () => {
       stale = true;
     };
-  }, [from, to]);
+  }, [range]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-white text-xl font-bold">Auswertung</h2>
-        <RangeFields from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
+        <DateRangePicker from={range.from} to={range.to} onChange={setRange} />
       </div>
 
       {error && (
