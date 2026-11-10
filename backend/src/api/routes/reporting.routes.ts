@@ -1,5 +1,6 @@
 import { Request, Response, Router } from "express";
 import {
+  getBookingDays,
   getReport,
   listTransactions,
 } from "../../modules/reporting/reporting.projections.js";
@@ -26,6 +27,10 @@ function parseRange(
   }
   return { from, to };
 }
+
+router.get("/booking-days", (_req: Request, res: Response): void => {
+  res.json(getBookingDays());
+});
 
 router.get("/summary", (req: Request, res: Response): void => {
   const range = parseRange(req, res);

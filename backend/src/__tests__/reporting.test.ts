@@ -37,6 +37,7 @@ import {
   orders,
 } from "../modules/orders/orders.projections.js";
 import {
+  getBookingDays,
   getReport,
   listTransactions,
 } from "../modules/reporting/reporting.projections.js";
@@ -304,6 +305,38 @@ describe("Reporting", () => {
     ).toEqual([]);
   });
 
+  it("booking days count sales per Berlin day, ascending", () => {
+    sale("a", "2026-07-10T10:00:00Z");
+    sale("b", "2026-07-11T21:30:00Z");
+    sale("c", "2026-07-11T22:30:00Z");
+
+    expect(getBookingDays()).toEqual([
+      { day: "2026-07-10", orderCount: 1 },
+      { day: "2026-07-11", orderCount: 1 },
+      { day: "2026-07-12", orderCount: 1 },
+    ]);
+  });
+
+  it("booking days skip cancelled and discarded orders", () => {
+    sale("a", "2026-07-10T10:00:00Z");
+    sale("b", "2026-07-11T10:00:00Z");
+    cancel("c", "b", "2026-07-12T10:00:00Z");
+    sale("d", "2026-07-13T10:00:00Z", { cancelled: true });
+
+    expect(getBookingDays()).toEqual([{ day: "2026-07-10", orderCount: 1 }]);
+  });
+
+  it("booking days sum equals report orderCount", () => {
+    sale("a", "2026-07-10T10:00:00Z");
+    sale("b", "2026-07-10T11:00:00Z");
+    sale("c", "2026-07-11T10:00:00Z");
+    sale("d", "2026-07-12T10:00:00Z");
+    cancel("x", "c", "2026-07-12T12:00:00Z");
+
+    const sum = getBookingDays().reduce((n, d) => n + d.orderCount, 0);
+    expect(sum).toBe(getReport("2026-07-10", "2026-07-12").orderCount);
+  });
+
   describe("routes", () => {
     const app = express();
     app.use("/api/reporting", reportingRoutes);
@@ -348,6 +381,20 @@ describe("Reporting", () => {
         .set(pin);
       expect(res.status).toBe(200);
       expect(res.body.totalGross).toBe(10);
+    });
+
+    it("GET /api/reporting/booking-days returns the days", async () => {
+      sale("o1", "2026-06-01T10:00:00Z");
+      const res = await request(app)
+        .get("/api/reporting/booking-days")
+        .set(pin);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([{ day: "2026-06-01", orderCount: 1 }]);
+    });
+
+    it("GET /api/reporting/booking-days needs the admin PIN", async () => {
+      const res = await request(app).get("/api/reporting/booking-days");
+      expect(res.status).toBe(403);
     });
   });
 });

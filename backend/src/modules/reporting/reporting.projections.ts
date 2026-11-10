@@ -1,6 +1,6 @@
 import { orders } from "../orders/orders.projections.js";
 import { Order } from "../orders/orders.types.js";
-import { Report, TransactionRecord } from "./reporting.types.js";
+import { BookingDay, Report, TransactionRecord } from "./reporting.types.js";
 
 export function berlinDay(d: Date): string {
   return d.toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
@@ -98,6 +98,19 @@ export function getReport(from: string, to: string): Report {
     .slice(0, 10);
 
   return report;
+}
+
+/** Days (Berlin) with at least one counted sale, ascending. */
+export function getBookingDays(): BookingDay[] {
+  const counts = new Map<string, number>();
+  for (const order of orders.values()) {
+    if (!isSale(order) || order.cancelledByOrderId || !order.closedAt) continue;
+    const day = berlinDay(order.closedAt);
+    counts.set(day, (counts.get(day) ?? 0) + 1);
+  }
+  return Array.from(counts, ([day, orderCount]) => ({ day, orderCount })).sort(
+    (a, b) => a.day.localeCompare(b.day),
+  );
 }
 
 export function listTransactions(f: {

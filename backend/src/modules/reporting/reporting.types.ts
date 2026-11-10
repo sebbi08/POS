@@ -23,3 +23,8 @@ export interface TransactionRecord {
   cancelsOrderId?: string;
   closedAt: string;
 }
+
+export interface BookingDay {
+  day: string;
+  orderCount: number;
+}
