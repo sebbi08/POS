@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,8 +21,17 @@ interface ConfirmDialogProps {
 }
 
 function ConfirmDialog({ open, title, description, confirmLabel, destructive, onConfirm, onCancel }: ConfirmDialogProps) {
+  // Confirming also closes the dialog (onOpenChange(false)); that must not count as a cancel.
+  const confirmed = useRef(false);
   return (
-    <AlertDialog open={open} onOpenChange={(next) => { if (!next) onCancel(); }}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) return;
+        if (confirmed.current) confirmed.current = false;
+        else onCancel();
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -29,7 +39,7 @@ function ConfirmDialog({ open, title, description, confirmLabel, destructive, on
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction variant={destructive ? "destructive" : "default"} onClick={onConfirm}>
+          <AlertDialogAction variant={destructive ? "destructive" : "default"} onClick={() => { confirmed.current = true; onConfirm(); }}>
             {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>

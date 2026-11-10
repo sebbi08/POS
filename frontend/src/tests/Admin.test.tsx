@@ -195,6 +195,9 @@ describe("TransactionHistory", () => {
     mockLists([]);
     render(<TransactionHistory />);
     expect(await screen.findByText("Keine Buchungen gefunden")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("combobox", { name: "Status" }));
+    expect(await screen.findByRole("option", { name: "Abgeschlossen" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Storniert" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /offen/i })).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("Suche nach Buchung oder Artikel...")).toBeInTheDocument();
   });

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,9 @@ function TransactionHistory() {
   const [terminal, setTerminal] = useState("");
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  // Kept after close so the dialog text stays stable during the fade-out.
+  const lastConfirmId = useRef<string | null>(null);
+  if (confirmId) lastConfirmId.current = confirmId;
   const [error, setError] = useState("");
   const { terminals, nameOf } = useTerminals();
 
@@ -179,7 +182,7 @@ function TransactionHistory() {
       <ConfirmDialog
         open={confirmId !== null}
         title="Buchung stornieren?"
-        description={confirmId ? `Buchung #${confirmId.slice(0, 8)} wirklich stornieren?` : ""}
+        description={lastConfirmId.current ? `Buchung #${lastConfirmId.current.slice(0, 8)} wirklich stornieren?` : ""}
         confirmLabel="Stornieren"
         destructive
         onConfirm={() => confirmId && handleCancel(confirmId)}

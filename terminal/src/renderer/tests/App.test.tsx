@@ -404,7 +404,7 @@ describe("App", () => {
     fireEvent.click(pay);
     await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("1 Buchung(en) nicht übertragen")).toBeInTheDocument();
-    expect(screen.getByText(STORAGE_WARNING)).toBeInTheDocument();
+    expect(screen.getByText(STORAGE_WARNING).closest("[role=alert]")).not.toBeNull();
     expect(screen.queryByText("Speichern fehlgeschlagen – bitte erneut versuchen")).not.toBeInTheDocument();
   });
 
@@ -416,7 +416,7 @@ describe("App", () => {
     fake.bridge.appendEvents.mockImplementationOnce(async (evs) => { await persist(evs); throw new Error("IPC"); });
     click("Ja, stornieren");
     await waitFor(() => expect(printJobs).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(STORAGE_WARNING)).toBeInTheDocument();
+    expect((await screen.findByText(STORAGE_WARNING)).closest("[role=alert]")).not.toBeNull();
     expect(vi.mocked(layoutJobs).mock.calls[0][0].cancelsOrderId).toBe(SALE_A);
   });
 
