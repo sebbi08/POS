@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { api } from "../api/client";
 import { formatEuro, todayIso } from "../lib/format";
 import { useTerminals } from "../lib/useTerminals";
@@ -48,17 +51,17 @@ function ReportOverview() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-white text-xl font-bold">Auswertung</h2>
+        <h2 className="text-foreground text-xl font-bold">Auswertung</h2>
         <DateRangePicker from={range.from} to={range.to} onChange={setRange} />
       </div>
 
       {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 mb-4 text-red-300 text-sm">
-          {error}
-        </div>
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      {!report && !error && <div className="text-gray-400">Lädt...</div>}
+      {!report && !error && <div className="text-muted-foreground">Lädt...</div>}
 
       {report && (
         <>
@@ -69,56 +72,70 @@ function ReportOverview() {
               { label: "MwSt.", value: formatEuro(report.totalVat) },
               { label: "Umsatz netto", value: formatEuro(report.totalNet) },
             ].map((card) => (
-              <div key={card.label} className="bg-gray-800 rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-white">{card.value}</div>
-                <div className="text-gray-400 text-xs mt-1">{card.label}</div>
-              </div>
+              <Card key={card.label} className="p-4 text-center gap-1">
+                <div className="text-2xl font-bold text-foreground">{card.value}</div>
+                <div className="text-muted-foreground text-xs">{card.label}</div>
+              </Card>
             ))}
           </div>
 
           {report.cancelledCount > 0 && (
-            <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 mb-4 text-red-300 text-sm">
-              {report.cancelledCount} stornierte Buchung(en) in den Summen nicht enthalten
-            </div>
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>
+                {report.cancelledCount} stornierte Buchung(en) in den Summen nicht enthalten
+              </AlertDescription>
+            </Alert>
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-800 rounded-xl p-4">
-              <h3 className="text-white font-semibold mb-2">Nach MwSt.-Satz</h3>
-              {Object.entries(report.vatByGroup).map(([key, data]) => (
-                <div key={key} className="flex justify-between text-sm py-1 border-b border-gray-700">
-                  <span className="text-gray-400">{data.rate}% MwSt.</span>
-                  <span className="text-white">
-                    {formatEuro(data.gross)} brutto / {formatEuro(data.vat)} MwSt.
-                  </span>
-                </div>
-              ))}
-            </div>
+            <Card className="p-4">
+              <h3 className="text-foreground font-semibold">Nach MwSt.-Satz</h3>
+              <Table>
+                <TableBody>
+                  {Object.entries(report.vatByGroup).map(([key, data]) => (
+                    <TableRow key={key}>
+                      <TableCell className="text-muted-foreground">{data.rate}% MwSt.</TableCell>
+                      <TableCell className="text-right">
+                        {formatEuro(data.gross)} brutto / {formatEuro(data.vat)} MwSt.
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
 
-            <div className="bg-gray-800 rounded-xl p-4">
-              <h3 className="text-white font-semibold mb-2">Nach Terminal</h3>
-              {Object.entries(report.byTerminal).map(([id, data]) => (
-                <div key={id} className="flex justify-between text-sm py-1 border-b border-gray-700">
-                  <span className="text-gray-400">{terminalName(id)}</span>
-                  <span className="text-white">
-                    {formatEuro(data.total)} · {data.orderCount} Buchungen
-                  </span>
-                </div>
-              ))}
-            </div>
+            <Card className="p-4">
+              <h3 className="text-foreground font-semibold">Nach Terminal</h3>
+              <Table>
+                <TableBody>
+                  {Object.entries(report.byTerminal).map(([id, data]) => (
+                    <TableRow key={id}>
+                      <TableCell className="text-muted-foreground">{terminalName(id)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatEuro(data.total)} · {data.orderCount} Buchungen
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
           </div>
 
-          <div className="bg-gray-800 rounded-xl p-4 mt-4">
-            <h3 className="text-white font-semibold mb-2">Meistverkaufte Artikel</h3>
-            {report.topItems.map((item, i) => (
-              <div key={item.itemId} className="flex justify-between text-sm py-1 border-b border-gray-700">
-                <span className="text-gray-400">
-                  {i + 1}. {item.name}
-                </span>
-                <span className="text-white">{item.count}× verkauft</span>
-              </div>
-            ))}
-          </div>
+          <Card className="p-4 mt-4">
+            <h3 className="text-foreground font-semibold">Meistverkaufte Artikel</h3>
+            <Table>
+              <TableBody>
+                {report.topItems.map((item, i) => (
+                  <TableRow key={item.itemId}>
+                    <TableCell className="text-muted-foreground">
+                      {i + 1}. {item.name}
+                    </TableCell>
+                    <TableCell className="text-right">{item.count}× verkauft</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
         </>
       )}
     </div>

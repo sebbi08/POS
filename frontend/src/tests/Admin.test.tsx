@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { format } from "date-fns";
 import { de } from "date-fns/locale/de";
@@ -133,6 +133,12 @@ describe("AdminLayout", () => {
     }
   });
 
+  it("marks the active tab", () => {
+    render(<MemoryRouter><AdminLayout /></MemoryRouter>);
+    expect(screen.getByRole("button", { name: "Auswertung" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Buchungen" })).not.toHaveAttribute("aria-current");
+  });
+
   it("opens on the Auswertung tab", async () => {
     render(<MemoryRouter><AdminLayout /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Auswertung" })).toBeInTheDocument();
@@ -195,13 +201,14 @@ describe("TransactionHistory", () => {
 
   it("Stornieren is offered only for closed originals, after confirmation", async () => {
     mockLists([closedRow, cancelRow]);
-    const confirm = vi.fn().mockReturnValue(true);
-    vi.stubGlobal("confirm", confirm);
     render(<TransactionHistory />);
     const buttons = await screen.findAllByRole("button", { name: "Stornieren" });
     expect(buttons).toHaveLength(1);
     fireEvent.click(buttons[0]);
-    expect(confirm).toHaveBeenCalledWith("Buchung #abc12345 wirklich stornieren?");
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Buchung #abc12345 wirklich stornieren?")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Stornieren" }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/orders/abc12345-1234/cancel", expect.anything()));
   });
 
@@ -225,9 +232,11 @@ describe("TransactionHistory", () => {
 
   it("does not cancel when the confirmation is declined", async () => {
     mockLists([closedRow]);
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
     render(<TransactionHistory />);
     fireEvent.click(await screen.findByRole("button", { name: "Stornieren" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Abbrechen" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     expect(api.post).not.toHaveBeenCalled();
   });
 });

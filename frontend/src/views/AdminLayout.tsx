@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { api } from "../api/client";
 import CatalogManager from "../components/CatalogManager";
 import CompanySettings from "../components/CompanySettings";
@@ -34,37 +35,32 @@ function AdminLayout() {
 
   return (
     <div className="min-h-screen flex">
-      <nav className="w-56 bg-gray-800 flex flex-col border-r border-gray-700">
-        <div className="p-4 border-b border-gray-700">
-          <h1 className="text-white font-bold text-lg">
+      <nav className="w-56 bg-card flex flex-col border-r border-border">
+        <div className="p-4 border-b border-border">
+          <h1 className="text-foreground font-bold text-lg">
             Administration
             {version && (
-              <span className="ml-2 text-xs font-normal text-gray-400">v{version}</span>
+              <span className="ml-2 text-xs font-normal text-muted-foreground">v{version}</span>
             )}
           </h1>
         </div>
         <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
           {tabs.map((t) => (
-            <button
+            <Button
               key={t.id}
+              variant={tab === t.id ? "secondary" : "ghost"}
+              aria-current={tab === t.id ? "page" : undefined}
               onClick={() => setTab(t.id)}
-              className={`text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                tab === t.id
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-300 hover:bg-gray-700"
-              }`}
+              className="justify-start"
             >
               {t.label}
-            </button>
+            </Button>
           ))}
         </div>
-        <div className="p-3 border-t border-gray-700">
-          <button
-            onClick={() => navigate("/")}
-            className="w-full bg-red-600 hover:bg-red-500 text-white rounded-lg py-2 text-sm"
-          >
+        <div className="p-3 border-t border-border">
+          <Button variant="destructive" className="w-full" onClick={() => navigate("/")}>
             Abmelden
-          </button>
+          </Button>
         </div>
       </nav>
       <main className="flex-1 overflow-y-auto p-6">
