@@ -74,10 +74,9 @@ test.describe("Admin — Anmeldung und Navigation", () => {
     await page.getByRole("button", { name: "Anmelden" }).click();
     await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible({ timeout: 5000 });
 
-    // Default tab is Auswertung with both dates set to today
+    // Default tab is Auswertung; the range defaults to a single day (today)
     await expect(page.getByRole("heading", { name: "Auswertung" })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByLabel("Von")).toHaveValue(/^\d{4}-\d{2}-\d{2}$/);
-    await expect(page.getByLabel("Von")).toHaveValue(await page.getByLabel("Bis").inputValue());
+    await expect(page.getByRole("button", { name: /^Zeitraum: \d{2}\.\d{2}\.\d{4}$/ })).toBeVisible();
   });
 
   test("admin panel — transaction history loads with filters", async ({ page }) => {
@@ -92,8 +91,7 @@ test.describe("Admin — Anmeldung und Navigation", () => {
 
     // Search and filter inputs should be present
     await expect(page.getByPlaceholder("Suche nach Buchung oder Artikel...")).toBeVisible();
-    await expect(page.getByLabel("Von")).toBeVisible();
-    await expect(page.getByLabel("Bis")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Zeitraum: \d{2}\.\d{2}\.\d{4}$/ })).toBeVisible();
   });
 
   test("admin panel — no Users tab exists", async ({ page }) => {

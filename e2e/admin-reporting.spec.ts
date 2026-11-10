@@ -9,6 +9,8 @@ const ADMIN = { "Content-Type": "application/json", "x-admin-pin": "0000" };
 const SERVER_VERSION: string = JSON.parse(readFileSync(join(__dirname, "../backend/package.json"), "utf8")).version;
 
 test.describe("Admin — Buchungen, Auswertung, Import/Export", () => {
+  // The range picker's calendar works in the browser's local time.
+  test.use({ timezoneId: "Europe/Berlin" });
   const terminalName = `E2E-Admin-Terminal-${Date.now()}`;
   let terminalId = "";
   let terminalKey = "";
@@ -132,6 +134,23 @@ test.describe("Admin — Buchungen, Auswertung, Import/Export", () => {
   const dayOffset = (days: number) =>
     new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
   const range = () => `from=${dayOffset(-1)}&to=${dayOffset(1)}`;
+  // Evaluation days are calendar days in Europe/Berlin.
+  const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+  // Today as the calendar's day buttons name it, e.g. "Dienstag, 10. November 2026".
+  const todayLabel = () =>
+    new Date().toLocaleDateString("de-DE", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "Europe/Berlin",
+    });
+
+  /** In the open range picker, picks the newest run of booking days („Letzte Buchungstage“). */
+  const pickNewestFestival = async (page: any) => {
+    // Festival buttons start with the day number, calendar day buttons with the weekday.
+    await page.getByRole("dialog").getByRole("button", { name: /^\d.*Buchung/ }).first().click();
+  };
 
   // ── Buchungen ──────────────────────────────────────────────
 
@@ -175,21 +194,25 @@ test.describe("Admin — Buchungen, Auswertung, Import/Export", () => {
 
     await loginToAdmin(page);
     await page.getByRole("button", { name: "Buchungen" }).click();
-    await page.getByLabel("Terminal", { exact: true }).selectOption({ label: terminalName });
+    await page.getByRole("combobox", { name: "Terminal" }).click();
+    await page.getByRole("option", { name: terminalName }).click();
 
+    // The upload is projected asynchronously; picking the newest booking days again reloads the list.
     const row = page.getByRole("row").filter({ hasText: shortId }).filter({ hasText: "Abgeschlossen" });
     await expect(async () => {
-      await page.getByLabel("Von").fill(dayOffset(-1));
+      if (await page.getByRole("dialog").isVisible()) await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: /^Zeitraum:/ }).click();
+      await pickNewestFestival(page);
       await expect(row).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: 10000 });
     await expect(row).toContainText(terminalName);
     await expect(row).toContainText("1x Espresso");
 
-    page.once("dialog", (dialog) => {
-      expect(dialog.message()).toBe(`Buchung #${shortId} wirklich stornieren?`);
-      dialog.accept();
-    });
     await row.getByRole("button", { name: "Stornieren" }).click();
+    const confirm = page.getByRole("alertdialog", { name: "Buchung stornieren?" });
+    await expect(confirm).toContainText(`Buchung #${shortId} wirklich stornieren?`);
+    await confirm.getByRole("button", { name: "Stornieren" }).click();
+    await expect(confirm).toBeHidden();
 
     await expect(
       page.getByRole("row").filter({ hasText: shortId }).filter({ hasText: "Storniert" }),
@@ -224,28 +247,54 @@ test.describe("Admin — Buchungen, Auswertung, Import/Export", () => {
     await expect(page.getByText("19% MwSt.")).toBeVisible();
   });
 
-  test("auswertung: invalid range shows the backend error", async ({ page }) => {
+  test("auswertung: calendar shows the booking count of today", async ({ page, request }) => {
+    const orderId = await syncSale(request, ["Espresso"]);
+    await expect
+      .poll(async () => {
+        const res = await request.get(`${API}/reporting/transactions?${range()}&terminal=${terminalId}`, {
+          headers: ADMIN,
+        });
+        return ((await res.json()) as { orderId: string }[]).some((t) => t.orderId === orderId);
+      })
+      .toBeTruthy();
+
     await loginToAdmin(page);
     await expect(page.getByRole("heading", { name: "Auswertung" })).toBeVisible();
-    await page.getByLabel("Von").fill("2099-01-02");
-    await page.getByLabel("Bis").fill("2099-01-01");
-    await expect(page.getByText("Zeitraum ungültig")).toBeVisible({ timeout: 5000 });
+    const trigger = page.getByRole("button", { name: /^Zeitraum:/ });
+    const popover = page.getByRole("dialog");
+    // Other specs may book in parallel, so the count is read right before each opening.
+    await expect(async () => {
+      if (await popover.isVisible()) await page.keyboard.press("Escape");
+      const res = await request.get(`${API}/reporting/summary?from=${today()}&to=${today()}`, { headers: ADMIN });
+      const n: number = (await res.json()).orderCount;
+      expect(n).toBeGreaterThanOrEqual(1);
+      await trigger.click();
+      await expect(
+        popover.getByRole("button", { name: `${todayLabel()}, ${n.toLocaleString("de-DE")} Buchung` }),
+      ).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 15000 });
+  });
+
+  test("auswertung: invalid range is rejected by the backend", async ({ request }) => {
+    const res = await request.get(`${API}/reporting/summary?from=2099-01-02&to=2099-01-01`, { headers: ADMIN });
+    expect(res.status()).toBe(400);
+    expect(await res.json()).toEqual({ error: "Zeitraum ungültig" });
   });
 
   test("terminals: show and regenerate key after confirmation", async ({ page }) => {
     await loginToAdmin(page);
     await page.getByRole("button", { name: "Terminals", exact: true }).click();
-    const card = page.locator("div.bg-gray-800").filter({ hasText: terminalName }).filter({ has: page.getByRole("button", { name: "Schlüssel anzeigen" }) });
+    const card = page.getByRole("group", { name: terminalName });
     await card.getByRole("button", { name: "Schlüssel anzeigen" }).click();
     await expect(card.getByText(terminalKey)).toBeVisible();
 
-    page.once("dialog", (dialog) => {
-      expect(dialog.message()).toBe(
-        "Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?",
-      );
-      dialog.accept();
-    });
     await card.getByRole("button", { name: "Neuen Schlüssel erzeugen" }).click();
+    const confirm = page.getByRole("alertdialog", { name: "Schlüssel neu erzeugen?" });
+    await expect(confirm).toContainText(
+      "Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?",
+    );
+    await confirm.getByRole("button", { name: "Fortfahren" }).click();
+    await expect(confirm).toBeHidden();
     await expect(card.getByText(terminalKey)).toHaveCount(0);
     await expect(card.locator("code")).toBeVisible();
   });
