@@ -1,5 +1,10 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface Terminal {
   id: string;
@@ -21,6 +26,7 @@ function TerminalConfig() {
   const [editingId, setEditingId] = useState<string | null>(null);
   // Shown keys per terminal id; null means the terminal has no key yet.
   const [keys, setKeys] = useState<Record<string, string | null>>({});
+  const [keyTarget, setKeyTarget] = useState<string | null>(null);
 
   const load = () => {
     api.get<Terminal[]>("/terminals").then(setTerminals);
@@ -50,7 +56,7 @@ function TerminalConfig() {
   };
 
   const generateKey = async (id: string) => {
-    if (!window.confirm("Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?")) return;
+    setKeyTarget(null);
     try {
       const { key } = await api.post<{ key: string }>(`/terminals/${id}/key`);
       setKeys((k) => ({ ...k, [id]: key }));
@@ -62,26 +68,29 @@ function TerminalConfig() {
 
   return (
     <div>
-      <h2 className="text-white text-xl font-bold mb-4">Terminals</h2>
+      <h2 className="text-xl font-bold mb-4">Terminals</h2>
 
       {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 mb-4 text-red-300 text-sm">
-          {error}
-        </div>
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      <div className="bg-gray-800 rounded-xl p-4 mb-4">
-        <div className="grid grid-cols-3 gap-2">
-          <input
-            className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+      <Card className="p-4 mb-4">
+        <div className="grid grid-cols-3 gap-2 items-center">
+          <Input
             placeholder="Terminalname"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <div className="flex flex-wrap gap-1">
             {groups.map((g) => (
-              <button
+              <Button
                 key={g.id}
+                type="button"
+                size="sm"
+                variant={form.groupIds.includes(g.id) ? "default" : "secondary"}
+                aria-pressed={form.groupIds.includes(g.id)}
                 onClick={() =>
                   setForm({
                     ...form,
@@ -90,19 +99,15 @@ function TerminalConfig() {
                       : [...form.groupIds, g.id],
                   })
                 }
-                className={`px-2 py-1 rounded text-xs ${
-                  form.groupIds.includes(g.id)
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-700 text-gray-300"
-                }`}
               >
                 {g.name}
-              </button>
+              </Button>
             ))}
           </div>
-          <label className="flex items-center gap-2 text-gray-300 text-sm">
+          <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
+              className="size-4 accent-primary"
               checked={form.printPickupReceipts}
               onChange={(e) => setForm({ ...form, printPickupReceipts: e.target.checked })}
             />
@@ -110,7 +115,7 @@ function TerminalConfig() {
           </label>
           {editingId ? (
             <>
-              <button
+              <Button
                 onClick={async () => {
                   await api.put(`/terminals/${editingId}`, {
                     name: form.name,
@@ -120,19 +125,15 @@ function TerminalConfig() {
                   resetForm();
                   load();
                 }}
-                className="bg-green-600 hover:bg-green-500 text-white rounded px-3 py-2 text-sm"
               >
                 Speichern
-              </button>
-              <button
-                onClick={resetForm}
-                className="bg-gray-600 hover:bg-gray-500 text-white rounded px-3 py-2 text-sm"
-              >
+              </Button>
+              <Button variant="secondary" onClick={resetForm}>
                 Abbrechen
-              </button>
+              </Button>
             </>
           ) : (
-            <button
+            <Button
               onClick={async () => {
                 await api.post("/terminals", {
                   name: form.name,
@@ -142,33 +143,34 @@ function TerminalConfig() {
                 resetForm();
                 load();
               }}
-              className="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 py-2 text-sm"
             >
               Hinzufügen
-            </button>
+            </Button>
           )}
         </div>
-      </div>
+      </Card>
 
       <div className="space-y-3">
         {terminals.map((t) => (
-          <div
+          <Card
             key={t.id}
-            className="bg-gray-800 rounded-xl p-4 flex items-center justify-between"
+            role="group"
+            aria-label={t.name}
+            className="p-4 flex-row items-center justify-between"
           >
             <div>
-              <div className="text-white font-medium">{t.name}</div>
-              <div className="text-gray-400 text-xs mt-1">
+              <div className="font-medium">{t.name}</div>
+              <div className="text-muted-foreground text-xs mt-1">
                 Warengruppen:{" "}
                 {t.groupIds
                   .map((gid) => groups.find((g) => g.id === gid)?.name ?? "")
                   .join(", ")}
               </div>
               {t.id in keys && (
-                <div className="text-xs mt-2 text-gray-300">
+                <div className="text-xs mt-2 text-muted-foreground">
                   Schlüssel:{" "}
                   {keys[t.id] ? (
-                    <code className="bg-gray-700 rounded px-1 select-all">{keys[t.id]}</code>
+                    <code className="bg-muted text-foreground rounded px-1 select-all">{keys[t.id]}</code>
                   ) : (
                     "Noch kein Schlüssel erzeugt"
                   )}
@@ -176,34 +178,32 @@ function TerminalConfig() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => showKey(t.id)}
-                className="text-gray-300 hover:text-white text-sm"
-              >
+              <Button variant="ghost" size="sm" onClick={() => showKey(t.id)}>
                 Schlüssel anzeigen
-              </button>
-              <button
-                onClick={() => generateKey(t.id)}
-                className="text-amber-400 hover:text-amber-300 text-sm"
-              >
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setKeyTarget(t.id)}>
                 Neuen Schlüssel erzeugen
-              </button>
-              <button
-                onClick={() => startEdit(t)}
-                className="text-blue-400 hover:text-blue-300 text-sm"
-              >
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => startEdit(t)}>
                 Bearbeiten
-              </button>
-              <button
-                onClick={() => api.delete(`/terminals/${t.id}`).then(load)}
-                className="text-red-400 hover:text-red-300 text-sm"
-              >
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => api.delete(`/terminals/${t.id}`).then(load)}>
                 Löschen
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={keyTarget !== null}
+        title="Schlüssel neu erzeugen?"
+        description="Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?"
+        confirmLabel="Fortfahren"
+        destructive
+        onConfirm={() => keyTarget && generateKey(keyTarget)}
+        onCancel={() => setKeyTarget(null)}
+      />
     </div>
   );
 }

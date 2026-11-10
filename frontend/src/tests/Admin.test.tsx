@@ -323,35 +323,41 @@ describe("TerminalConfig", () => {
       return Promise.resolve([]) as never;
     });
   });
-  afterEach(() => {
-    vi.unstubAllGlobals();
+  const confirmText = "Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?";
+
+  it("terminal card is a named group", async () => {
+    render(<TerminalConfig />);
+    expect(await screen.findByRole("group", { name: "Bar" })).toBeInTheDocument();
   });
 
   it("terminal config shows generated key", async () => {
-    const confirm = vi.fn().mockReturnValue(true);
-    vi.stubGlobal("confirm", confirm);
     vi.mocked(api.post).mockResolvedValueOnce({ key: "newkey-456" });
     render(<TerminalConfig />);
     fireEvent.click(await screen.findByRole("button", { name: "Neuen Schlüssel erzeugen" }));
-    expect(confirm).toHaveBeenCalledWith(
-      "Der alte Schlüssel wird ungültig. Das Terminal muss neu eingerichtet werden. Fortfahren?",
-    );
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Schlüssel neu erzeugen?")).toBeInTheDocument();
+    expect(within(dialog).getByText(confirmText)).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Fortfahren" }));
     expect(await screen.findByText("newkey-456")).toBeInTheDocument();
     expect(api.post).toHaveBeenCalledWith("/terminals/t1/key");
   });
 
   it("does not generate a key when the confirmation is declined", async () => {
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
     render(<TerminalConfig />);
     fireEvent.click(await screen.findByRole("button", { name: "Neuen Schlüssel erzeugen" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Abbrechen" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     expect(api.post).not.toHaveBeenCalled();
   });
 
   it("shows an error when generating the key fails", async () => {
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
     vi.mocked(api.post).mockRejectedValueOnce(new Error("Terminal nicht gefunden"));
     render(<TerminalConfig />);
     fireEvent.click(await screen.findByRole("button", { name: "Neuen Schlüssel erzeugen" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Fortfahren" }));
     expect(await screen.findByText("Terminal nicht gefunden")).toBeInTheDocument();
   });
 

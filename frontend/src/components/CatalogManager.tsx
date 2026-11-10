@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { formatEuro } from "../lib/format";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-transparent dark:bg-input/30 px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 interface ItemGroup {
   id: string;
@@ -61,26 +68,25 @@ function CatalogManager({ type }: Props) {
     });
   };
 
-  if (loading) return <div className="text-gray-400">Lädt...</div>;
+  if (loading) return <div className="text-muted-foreground">Lädt...</div>;
 
   return (
     <div>
-      <h2 className="text-white text-xl font-bold mb-4">
+      <h2 className="text-xl font-bold mb-4">
         {type === "groups" ? "Warengruppen" : "Artikel"}
       </h2>
 
       {type === "groups" && (
         <>
-          <div className="bg-gray-800 rounded-xl p-4 mb-4">
+          <Card className="p-4 mb-4">
             <div className="grid grid-cols-4 gap-2">
-              <input
-                className="bg-gray-700 text-white rounded px-3 py-2 text-sm col-span-2"
+              <Input
+                className="col-span-2"
                 placeholder="Name der Warengruppe"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
-              <input
-                className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+              <Input
                 placeholder="MwSt. %"
                 type="number"
                 value={form.vatRate}
@@ -88,7 +94,7 @@ function CatalogManager({ type }: Props) {
               />
               {editingId ? (
                 <>
-                  <button
+                  <Button
                     onClick={async () => {
                       await api.put(`/catalog/groups/${editingId}`, {
                         name: form.name,
@@ -97,19 +103,15 @@ function CatalogManager({ type }: Props) {
                       resetForm();
                       load();
                     }}
-                    className="bg-green-600 hover:bg-green-500 text-white rounded px-3 py-2 text-sm"
                   >
                     Speichern
-                  </button>
-                  <button
-                    onClick={resetForm}
-                    className="bg-gray-600 hover:bg-gray-500 text-white rounded px-3 py-2 text-sm"
-                  >
+                  </Button>
+                  <Button variant="secondary" onClick={resetForm}>
                     Abbrechen
-                  </button>
+                  </Button>
                 </>
               ) : (
-                <button
+                <Button
                   onClick={async () => {
                     await api.post("/catalog/groups", {
                       name: form.name,
@@ -118,59 +120,53 @@ function CatalogManager({ type }: Props) {
                     resetForm();
                     load();
                   }}
-                  className="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 py-2 text-sm"
                 >
                   Hinzufügen
-                </button>
+                </Button>
               )}
             </div>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-gray-400 border-b border-gray-700">
-                <th className="text-left py-2">Name</th>
-                <th className="text-right py-2">MwSt.</th>
-                <th className="text-right py-2">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
+          </Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="text-right">MwSt.</TableHead>
+                <TableHead className="text-right">Aktionen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {groups.map((g) => (
-                <tr key={g.id} className="border-b border-gray-800">
-                  <td className="text-white py-2">{g.name}</td>
-                  <td className="text-white text-right py-2">{g.vatRate}%</td>
-                  <td className="text-right py-2">
-                    <button
-                      onClick={() => startEdit(g.id, g.name, g.vatRate)}
-                      className="text-blue-400 hover:text-blue-300 text-xs mr-2"
-                    >
-                      Bearbeiten
-                    </button>
-                    <button
-                      onClick={() => api.delete(`/catalog/groups/${g.id}`).then(load)}
-                      className="text-red-400 hover:text-red-300 text-xs"
-                    >
-                      Löschen
-                    </button>
-                  </td>
-                </tr>
+                <TableRow key={g.id}>
+                  <TableCell>{g.name}</TableCell>
+                  <TableCell className="text-right">{g.vatRate}%</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => startEdit(g.id, g.name, g.vatRate)}>
+                        Bearbeiten
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => api.delete(`/catalog/groups/${g.id}`).then(load)}>
+                        Löschen
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </>
       )}
 
       {type === "items" && (
         <>
-          <div className="bg-gray-800 rounded-xl p-4 mb-4">
+          <Card className="p-4 mb-4">
             <div className="grid grid-cols-4 gap-2">
-              <input
-                className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+              <Input
                 placeholder="Artikelname"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
               <select
-                className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+                className={selectClass}
                 value={form.groupId}
                 onChange={(e) => setForm({ ...form, groupId: e.target.value })}
               >
@@ -181,8 +177,7 @@ function CatalogManager({ type }: Props) {
                   </option>
                 ))}
               </select>
-              <input
-                className="bg-gray-700 text-white rounded px-3 py-2 text-sm"
+              <Input
                 placeholder="Preis"
                 type="number"
                 step="0.01"
@@ -191,7 +186,7 @@ function CatalogManager({ type }: Props) {
               />
               {editingId ? (
                 <>
-                  <button
+                  <Button
                     onClick={async () => {
                       await api.put(`/catalog/items/${editingId}`, {
                         name: form.name,
@@ -202,19 +197,15 @@ function CatalogManager({ type }: Props) {
                       load();
                     }}
                     disabled={!form.groupId}
-                    className="bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white rounded px-3 py-2 text-sm"
                   >
                     Speichern
-                  </button>
-                  <button
-                    onClick={resetForm}
-                    className="bg-gray-600 hover:bg-gray-500 text-white rounded px-3 py-2 text-sm"
-                  >
+                  </Button>
+                  <Button variant="secondary" onClick={resetForm}>
                     Abbrechen
-                  </button>
+                  </Button>
                 </>
               ) : (
-                <button
+                <Button
                   onClick={async () => {
                     await api.post("/catalog/items", {
                       name: form.name,
@@ -225,50 +216,47 @@ function CatalogManager({ type }: Props) {
                     load();
                   }}
                   disabled={!form.groupId}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded px-3 py-2 text-sm"
                 >
                   Hinzufügen
-                </button>
+                </Button>
               )}
             </div>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-gray-400 border-b border-gray-700">
-                <th className="text-left py-2">Name</th>
-                <th className="text-left py-2">Warengruppe</th>
-                <th className="text-right py-2">Preis</th>
-                <th className="text-right py-2">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
+          </Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Warengruppe</TableHead>
+                <TableHead className="text-right">Preis</TableHead>
+                <TableHead className="text-right">Aktionen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {items.map((item) => (
-                <tr key={item.id} className="border-b border-gray-800">
-                  <td className="text-white py-2">{item.name}</td>
-                  <td className="text-gray-400 py-2">
+                <TableRow key={item.id}>
+                  <TableCell>{item.name}</TableCell>
+                  <TableCell className="text-muted-foreground">
                     {groups.find((g) => g.id === item.groupId)?.name ?? ""}
-                  </td>
-                  <td className="text-white text-right py-2">
-                    {formatEuro(item.price)}
-                  </td>
-                  <td className="text-right py-2">
-                    <button
-                      onClick={() => startEdit(item.id, item.name, undefined, item.price, item.groupId)}
-                      className="text-blue-400 hover:text-blue-300 text-xs mr-2"
-                    >
-                      Bearbeiten
-                    </button>
-                    <button
-                      onClick={() => api.delete(`/catalog/items/${item.id}`).then(load)}
-                      className="text-red-400 hover:text-red-300 text-xs"
-                    >
-                      Löschen
-                    </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="text-right">{formatEuro(item.price)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => startEdit(item.id, item.name, undefined, item.price, item.groupId)}
+                      >
+                        Bearbeiten
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => api.delete(`/catalog/items/${item.id}`).then(load)}>
+                        Löschen
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </>
       )}
     </div>

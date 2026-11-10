@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Company {
   name: string;
@@ -29,49 +33,46 @@ function CompanySettings() {
 
   return (
     <div>
-      <h2 className="text-white text-xl font-bold mb-4">Firmendaten</h2>
-      <div className="bg-gray-800 rounded-xl p-6 max-w-md">
+      <h2 className="text-xl font-bold mb-4">Firmendaten</h2>
+      <Card className="p-6 max-w-md">
         <div className="flex flex-col gap-3">
-          <div>
-            <label className="text-gray-400 text-sm">Name</label>
-            <input
-              className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm mt-1"
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="company-name">Name</Label>
+            <Input
+              id="company-name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </div>
-          <div>
-            <label className="text-gray-400 text-sm">Adresse</label>
-            <input
-              className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm mt-1"
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="company-address">Adresse</Label>
+            <Input
+              id="company-address"
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
           </div>
-          <div>
-            <label className="text-gray-400 text-sm">Ort</label>
-            <input
-              className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm mt-1"
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="company-city">Ort</Label>
+            <Input
+              id="company-city"
               value={form.city}
               onChange={(e) => setForm({ ...form, city: e.target.value })}
             />
           </div>
-          <div>
-            <label className="text-gray-400 text-sm">USt-IdNr.</label>
-            <input
-              className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm mt-1"
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="company-vatId">USt-IdNr.</Label>
+            <Input
+              id="company-vatId"
               value={form.vatId}
               onChange={(e) => setForm({ ...form, vatId: e.target.value })}
             />
           </div>
-          <button
-            onClick={handleSave}
-            className="bg-green-600 hover:bg-green-500 text-white rounded-lg py-2 text-sm font-semibold mt-2"
-          >
+          <Button onClick={handleSave} className="mt-2">
             {saved ? "Gespeichert!" : "Speichern"}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
