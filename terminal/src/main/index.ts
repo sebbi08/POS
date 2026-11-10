@@ -1,8 +1,9 @@
-import { app, BrowserWindow, ipcMain, session } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, session } from "electron";
 import { join } from "node:path";
 import type { CatalogSnapshot } from "../shared/contract";
 import type { NewEvent, TerminalSettings } from "../shared/types";
 import { resolveDataDir } from "./data-dir";
+import { toggleFullScreen, watchFullScreen } from "./fullscreen";
 import { isAllowedNavigation } from "./navigation";
 import { prepareStore } from "./prepare-store";
 import { LocalStore } from "./store";
@@ -26,6 +27,11 @@ function registerAppIpc(updateReady: () => string | null, storeError: string | n
   ipcMain.handle("app:storeError", () => storeError);
 }
 
+function registerWindowIpc(): void {
+  ipcMain.handle("window:toggleFullScreen", () => toggleFullScreen(mainWindow));
+  ipcMain.handle("window:isFullScreen", () => mainWindow?.isFullScreen() ?? false);
+}
+
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
@@ -40,6 +46,7 @@ function createWindow(): void {
       sandbox: true,
     },
   });
+  watchFullScreen(win);
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
   });
@@ -62,7 +69,10 @@ async function start(dataDir: string): Promise<void> {
   const updateNotice = createUpdateNotice((version) => mainWindow?.webContents.send("update:ready", version));
   if (storeError === null) registerStoreIpc(store);
   registerAppIpc(updateNotice.current, storeError);
+  registerWindowIpc();
   registerUsb(session.defaultSession, () => mainWindow);
+  // Touch till: no menu bar (this also drops its shortcuts such as reload and DevTools).
+  Menu.setApplicationMenu(null);
   createWindow();
   startUpdater({ isPackaged: app.isPackaged, notify: updateNotice.ready });
 

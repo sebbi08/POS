@@ -9,11 +9,13 @@ interface Props {
   canReprint: boolean;
   /** Version of a downloaded update that installs on quit. */
   updateVersion: string | null;
+  fullScreen: boolean;
   onFetchCatalog: () => void;
   onUpload: () => void;
   onReprint: () => void;
   onCancel: () => void;
   onSettings: () => void;
+  onToggleFullScreen: () => void;
 }
 
 const button = "bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors";
@@ -43,6 +45,9 @@ function StatusBar(p: Props) {
         <button onClick={p.onReprint} disabled={p.busy || !p.canReprint} className={button}>Letzten Bon nachdrucken</button>
         <button onClick={p.onCancel} disabled={p.busy || p.uploading} className={button}>Storno</button>
         <button onClick={p.onSettings} className={button}>Einstellungen</button>
+        <button onClick={p.onToggleFullScreen} className={button}>
+          {p.fullScreen ? "Vollbild beenden" : "Vollbild"}
+        </button>
       </div>
     </header>
   );

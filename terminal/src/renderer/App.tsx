@@ -8,6 +8,7 @@ import PinDialog from "./components/PinDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import SetupWizard from "./components/SetupWizard";
 import StatusBar from "./components/StatusBar";
+import { useFullScreen } from "./state/useFullScreen";
 import { useTerminal } from "./state/useTerminal";
 
 type Dialog = "checkout" | "cancel" | "settings" | null;
@@ -34,6 +35,7 @@ export default function App() {
 
 function Till() {
   const t = useTerminal();
+  const fullScreen = useFullScreen();
   const { actions } = t;
   const [resetup, setResetup] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -91,11 +93,13 @@ function Till() {
         uploading={t.uploading}
         canReprint={t.canReprint}
         updateVersion={t.updateVersion}
+        fullScreen={fullScreen.fullScreen}
         onFetchCatalog={() => void actions.fetchCatalog()}
         onUpload={() => void actions.upload()}
         onReprint={() => void actions.reprintLast()}
         onCancel={() => setDialog("cancel")}
         onSettings={() => setDialog("settings")}
+        onToggleFullScreen={fullScreen.toggle}
       />
       {t.clockWarning && (
         <div role="alert" className="bg-yellow-400 text-gray-900 font-semibold px-4 py-3">{t.clockWarning}</div>

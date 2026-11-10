@@ -57,6 +57,7 @@ export function installFakeBridge(init: Init = {}) {
     synced: { ...(init.synced ?? {}) },
   };
   const updateListeners = new Set<(version: string) => void>();
+  const fullScreenListeners = new Set<(fullScreen: boolean) => void>();
   const bridge = {
     appendEvents: vi.fn(async (events: NewEvent[]) => {
       const added = events.map((e): LocalEvent => ({ ...clone(e), seq: ++seq }));
@@ -82,8 +83,14 @@ export function installFakeBridge(init: Init = {}) {
       updateListeners.add(cb);
       return () => { updateListeners.delete(cb); };
     }),
+    toggleFullScreen: vi.fn(async () => {}),
+    onFullScreenChange: vi.fn((cb: (fullScreen: boolean) => void) => {
+      fullScreenListeners.add(cb);
+      return () => { fullScreenListeners.delete(cb); };
+    }),
   } satisfies TerminalBridge;
   (window as unknown as { terminal: TerminalBridge }).terminal = bridge;
   const emitUpdateReady = (version: string) => { for (const cb of updateListeners) cb(version); };
-  return { bridge, state, log, emitUpdateReady, updateListeners };
+  const emitFullScreen = (fullScreen: boolean) => { for (const cb of fullScreenListeners) cb(fullScreen); };
+  return { bridge, state, log, emitUpdateReady, updateListeners, emitFullScreen, fullScreenListeners };
 }

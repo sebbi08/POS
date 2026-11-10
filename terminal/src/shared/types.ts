@@ -29,4 +29,8 @@ export interface TerminalBridge {   // window.terminal
   chooseUsb(deviceId: string | null): Promise<void>;
   /** An update is downloaded and installs on quit. Also fires for one that became ready before subscribing. */
   onUpdateReady(cb: (version: string) => void): () => void;
+  /** Switches the window into or out of fullscreen. */
+  toggleFullScreen(): Promise<void>;
+  /** Fullscreen started or ended; also fires once with the current state. Returns an unsubscribe. */
+  onFullScreenChange(cb: (fullScreen: boolean) => void): () => void;
 }

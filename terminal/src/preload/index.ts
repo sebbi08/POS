@@ -27,6 +27,13 @@ const bridge: TerminalBridge = {
     }, () => {});
     return () => { ipcRenderer.removeListener("update:ready", listener); };
   },
+  toggleFullScreen: () => ipcRenderer.invoke("window:toggleFullScreen"),
+  onFullScreenChange: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, fullScreen: boolean) => cb(fullScreen);
+    ipcRenderer.on("window:fullScreen", listener);
+    void ipcRenderer.invoke("window:isFullScreen").then((fullScreen: boolean) => cb(fullScreen), () => {});
+    return () => { ipcRenderer.removeListener("window:fullScreen", listener); };
+  },
 };
 
 contextBridge.exposeInMainWorld("terminal", bridge);

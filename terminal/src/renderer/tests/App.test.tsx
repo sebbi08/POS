@@ -677,6 +677,32 @@ describe("App", () => {
   });
 });
 
+describe("Vollbild", () => {
+  it("the Vollbild button asks main to toggle fullscreen", async () => {
+    setup({ settings, catalog });
+    await screen.findByRole("button", { name: "Vollbild" });
+    click("Vollbild");
+    expect(fake.bridge.toggleFullScreen).toHaveBeenCalledOnce();
+  });
+
+  it("the button follows the window: Vollbild beenden while fullscreen", async () => {
+    setup({ settings, catalog });
+    await screen.findByRole("button", { name: "Vollbild" });
+    act(() => fake.emitFullScreen(true));
+    expect(screen.getByRole("button", { name: "Vollbild beenden" })).toBeInTheDocument();
+    act(() => fake.emitFullScreen(false));
+    expect(screen.getByRole("button", { name: "Vollbild" })).toBeInTheDocument();
+  });
+
+  it("unsubscribes from fullscreen changes on unmount", async () => {
+    const { unmount } = setup({ settings, catalog });
+    await screen.findByRole("button", { name: "Vollbild" });
+    expect(fake.fullScreenListeners.size).toBe(1);
+    unmount();
+    expect(fake.fullScreenListeners.size).toBe(0);
+  });
+});
+
 describe("Admin-PIN and version check", () => {
   it("Artikel abholen asks for PIN and sends it", async () => {
     vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 0 });

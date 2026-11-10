@@ -218,6 +218,23 @@ test.describe("Terminal-App gegen echten Server", () => {
     expect(report.cancelledCount).toBeGreaterThanOrEqual(cancelledBefore + 1);
   });
 
+  test("no menu bar; Vollbild switches the window into fullscreen and back", async ({ request }) => {
+    const terminal = await createTerminal(request);
+    let page: Page;
+    ({ app, page } = await launch(dataDir));
+    await setUp(page, terminal);
+    const isFullScreen = () => app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen());
+
+    expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu())).toBeNull();
+    expect(await isFullScreen()).toBe(false);
+
+    await page.getByRole("button", { name: "Vollbild", exact: true }).click();
+    await expect.poll(isFullScreen).toBe(true);
+    await page.getByRole("button", { name: "Vollbild beenden" }).click();
+    await expect.poll(isFullScreen).toBe(false);
+    await expect(page.getByRole("button", { name: "Vollbild", exact: true })).toBeVisible();
+  });
+
   test("server unreachable on Artikel abholen keeps items", async ({ request }) => {
     const terminal = await createTerminal(request);
     let page: Page;
