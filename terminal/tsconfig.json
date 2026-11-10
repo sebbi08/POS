@@ -14,7 +14,8 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": { "@/*": ["./src/renderer/*"] }
   },
   "include": ["src", "electron.vite.config.ts", "vitest.config.mts"]
 }

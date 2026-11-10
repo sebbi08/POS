@@ -24,6 +24,7 @@ export default defineConfig({
         plugins: [react()],
         resolve: {
           alias: {
+            "@": fileURLToPath(new URL("./src/renderer", import.meta.url)),
             // The real encoder is not needed for layout tests; the stub records calls.
             "@point-of-sale/receipt-printer-encoder": fileURLToPath(
               new URL("./src/renderer/test/encoder-stub.ts", import.meta.url),
