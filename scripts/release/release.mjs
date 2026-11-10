@@ -16,8 +16,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const changelogPath = join(root, 'CHANGELOG.md');
 const packageDirs = ['.', 'backend', 'frontend', 'terminal'];
 
+// Set once local changes start (after the CI gate): how to retry or undo.
+let recoveryHint = null;
+
 function fail(message) {
   console.error(`release aborted: ${message}`);
+  if (recoveryHint) console.error(`\n${recoveryHint}`);
   process.exit(1);
 }
 
@@ -51,7 +55,10 @@ git('fetch', 'origin', '--tags', '--prune');
 const problems = [];
 const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
 if (branch !== 'master') problems.push(`must be on master (on ${branch})`);
-if (git('status', '--porcelain') !== '') problems.push('working tree is not clean');
+// Untracked files are fine: only named files are added to the release commit.
+if (git('status', '--porcelain', '--untracked-files=no') !== '') {
+  problems.push('working tree has uncommitted changes to tracked files');
+}
 const head = git('rev-parse', 'HEAD');
 if (head !== git('rev-parse', 'origin/master')) problems.push('HEAD differs from origin/master');
 for (const problem of problems) {
@@ -109,25 +116,39 @@ try {
 }
 
 // 5. Local changes: bump, changelog, commit, tag
+const newTag = `v${version}`;
+const changelogExisted = existsSync(changelogPath);
+recoveryHint = [
+  `Local release state for ${newTag} may be incomplete. To recover:`,
+  `  retry the push (if the release commit and tag exist):`,
+  `    git push --atomic origin master ${newTag}`,
+  `  or undo everything (git tag -d fails harmlessly if the tag was not created):`,
+  `    ${changelogExisted ? '' : 'rm -f CHANGELOG.md && '}git reset --hard origin/master && git tag -d ${newTag}`,
+].join('\n');
 for (const dir of packageDirs) {
   run('npm', ['version', version, '--no-git-tag-version', '--allow-same-version'], {
     cwd: join(root, dir),
   });
 }
-const existing = existsSync(changelogPath)
+const existing = changelogExisted
   ? readFileSync(changelogPath, 'utf8')
   : '# Changelog\n';
 const rest = existing.replace(/^# Changelog\n*/, '');
-writeFileSync(changelogPath, `# Changelog\n\n${section}\n${rest ? `${rest}` : ''}`);
+try {
+  writeFileSync(changelogPath, `# Changelog\n\n${section}\n${rest ? `${rest}` : ''}`);
+} catch (err) {
+  fail(`writing CHANGELOG.md failed: ${err.message}`);
+}
 const files = packageDirs.flatMap((d) => [
   join(d, 'package.json'),
   join(d, 'package-lock.json'),
 ]);
 git('add', ...files, 'CHANGELOG.md');
-git('commit', '-m', `chore(release): v${version}`);
-git('tag', '-a', `v${version}`, '-m', `v${version}`);
+git('commit', '-m', `chore(release): ${newTag}`);
+git('tag', '-a', newTag, '-m', newTag);
 
 // 6. Publish
-git('push', '--atomic', 'origin', 'master', `v${version}`);
-console.log(`\nReleased v${version}. Check the pipeline with:`);
+git('push', '--atomic', 'origin', 'master', newTag);
+recoveryHint = null;
+console.log(`\nReleased ${newTag}. Check the pipeline with:`);
 console.log('  gh run list --workflow release.yml -L1');
