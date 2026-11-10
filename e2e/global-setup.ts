@@ -68,7 +68,9 @@ async function globalSetup() {
 
   log("Starting frontend…");
   const frontendStart = Date.now();
-  const frontend = spawn("npx", ["vite", "--port", "5173"], {
+  // Explicit IPv4: on CI runners "localhost" resolves to ::1, so Vite would
+  // listen where neither waitForPort nor the browser (127.0.0.1) looks.
+  const frontend = spawn("npx", ["vite", "--host", "127.0.0.1", "--port", "5173", "--strictPort"], {
     cwd: "frontend",
     stdio: "pipe",
     detached: true, // own process group so teardown can kill the whole tree
