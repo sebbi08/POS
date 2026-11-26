@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1 (2026-11-26)
+
+### Bug Fixes
+
+- label the company tax number as St.-Nr. instead of USt-ID (4d9eb28)
+
 ## v0.2.0 (2026-11-10)
 
 ### Features
