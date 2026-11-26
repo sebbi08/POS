@@ -6,7 +6,7 @@ import {
 } from "./layout";
 
 const ctx: PrintContext = {
-  company: { name: "Verein e.V.", address: "Hauptstr. 1", city: "12345 Stadt", vatId: "DE123" },
+  company: { name: "Verein e.V.", address: "Hauptstr. 1", city: "12345 Stadt", vatId: "12/345/67890" },
   terminalName: "Kasse 1", width: 42, copy: false,
 };
 
@@ -57,7 +57,7 @@ describe("receipt layout", () => {
   it("header, footer and alignment follow the spec", () => {
     const lines = layoutFinalReceipt(oneLine, ctx);
     const text = all(lines);
-    expect(text).toContain("USt-ID: DE123");
+    expect(text).toContain("St.-Nr.: 12/345/67890");
     expect(text).toContain("Bestellung #abcdef12 · Kasse 1");
     expect(text).toContain(new Date(CLOSED_AT).toLocaleString("de-DE"));
     expect(lines).toContainEqual({ kind: "text", text: "Verein e.V.", align: "center", bold: true });
@@ -109,6 +109,6 @@ describe("receipt layout", () => {
 
   it("omits header lines the company does not have", () => {
     const text = all(layoutFinalReceipt(oneLine, { ...ctx, company: { name: "", address: "", city: "", vatId: "" } }));
-    expect(text).not.toContain("USt-ID");
+    expect(text).not.toContain("St.-Nr.");
   });
 });

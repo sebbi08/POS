@@ -61,7 +61,7 @@ function CompanySettings() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="company-vatId">USt-IdNr.</Label>
+            <Label htmlFor="company-vatId">St.-Nr.</Label>
             <Input
               id="company-vatId"
               value={form.vatId}

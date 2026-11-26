@@ -35,7 +35,7 @@ function header(ctx: PrintContext): ReceiptLine[] {
     lines.push(text(company.name, "center", true));
     if (company.address) lines.push(text(company.address, "center"));
     if (company.city) lines.push(text(company.city, "center"));
-    if (company.vatId) lines.push(text(`USt-ID: ${company.vatId}`, "center"));
+    if (company.vatId) lines.push(text(`St.-Nr.: ${company.vatId}`, "center"));
   }
   lines.push(...blank(1), { kind: "rule" }, ...blank(2));
   return lines;
