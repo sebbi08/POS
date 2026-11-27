@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.0 (2026-11-27)
+
+### Features
+
+- terminal: choose light, dark or system theme in settings (b0098b4)
+- terminal: add light theme tokens and follow the system scheme (cf1613f)
+- frontend: add theme toggle to admin sidebar and login (9df0c8d)
+- frontend: add light theme tokens and theme preference module (9febe62)
+
+### Bug Fixes
+
+- terminal: treat an unknown stored theme as system (3825ac6)
+
 ## v0.2.1 (2026-11-26)
 
 ### Bug Fixes
