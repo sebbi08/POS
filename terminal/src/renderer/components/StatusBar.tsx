@@ -36,7 +36,7 @@ function StatusBar(p: Props) {
             {`${p.unsyncedCount} Buchung(en) nicht übertragen`}
           </Badge>
           {p.updateVersion && (
-            <div className="text-green-300">{`Update ${p.updateVersion} bereit – wird beim Beenden installiert`}</div>
+            <div className="text-green-700 dark:text-green-300">{`Update ${p.updateVersion} bereit – wird beim Beenden installiert`}</div>
           )}
         </div>
       </div>

@@ -200,7 +200,7 @@ function PrinterSettings({ settings, onSave }: Props) {
 
             {message && (
               <div
-                className={`text-sm text-center rounded-lg p-2 ${message.error ? "bg-red-500/20 text-red-300" : "bg-green-500/20 text-green-300"}`}
+                className={`text-sm text-center rounded-lg p-2 ${message.error ? "bg-red-500/20 text-red-700 dark:text-red-300" : "bg-green-500/20 text-green-700 dark:text-green-300"}`}
               >
                 {message.text}
               </div>

@@ -1,7 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { TouchDialog } from "@/components/ui/touch-dialog";
-import type { TerminalSettings } from "../../shared/types";
+import type { TerminalSettings, ThemePreference } from "../../shared/types";
 import PrinterSettings from "./PrinterSettings";
+
+const THEMES: { value: ThemePreference; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Hell" },
+  { value: "dark", label: "Dunkel" },
+];
 
 interface Props {
   settings: TerminalSettings;
@@ -26,6 +32,7 @@ function resetupBlocker({ hasOpenOrder, syncing }: Props): string | null {
 function SettingsDialog(props: Props) {
   const { settings, onSave, onResetup, onClose } = props;
   const blocker = resetupBlocker(props);
+  const theme = settings.theme ?? "system";
 
   return (
     <TouchDialog title="Einstellungen" onClose={onClose} className="w-[28rem]">
@@ -53,6 +60,24 @@ function SettingsDialog(props: Props) {
           Rückgeldrechner anzeigen
         </label>
 
+        <div className="bg-muted rounded-lg px-3 py-3 space-y-2">
+          <div className="text-muted-foreground text-xs">Darstellung</div>
+          <div role="group" aria-label="Darstellung" className="grid grid-cols-3 gap-2">
+            {THEMES.map((t) => (
+              <Button
+                key={t.value}
+                type="button"
+                size="touch"
+                variant={theme === t.value ? "default" : "outline"}
+                aria-pressed={theme === t.value}
+                onClick={() => onSave({ theme: t.value })}
+              >
+                {t.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
         <div>
           <Button
             type="button"
@@ -64,7 +89,7 @@ function SettingsDialog(props: Props) {
           >
             Terminal neu einrichten
           </Button>
-          {blocker && <p className="text-yellow-300 text-sm mt-1">{blocker}</p>}
+          {blocker && <p className="text-amber-700 dark:text-yellow-300 text-sm mt-1">{blocker}</p>}
         </div>
       </div>
 

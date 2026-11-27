@@ -70,7 +70,7 @@ function CheckoutDialog({ total, onConfirm, onCancel }: Props) {
           ) : change < 0 ? (
             <span className="text-destructive text-lg">Betrag reicht nicht</span>
           ) : (
-            <span className="text-green-400">{euro(change)}</span>
+            <span className="text-green-700 dark:text-green-400">{euro(change)}</span>
           )}
         </div>
 

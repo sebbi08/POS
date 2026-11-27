@@ -445,6 +445,31 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByLabelText("Rückgeldrechner anzeigen")).toBeChecked());
   });
 
+  it("applies the stored theme and switches it from the settings", async () => {
+    setup({ settings: { ...settings, theme: "dark" }, catalog });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    expect(document.documentElement).toHaveClass("dark");
+    click("Hell");
+    await waitFor(() => expect(fake.bridge.saveSettings).toHaveBeenCalledWith({ ...settings, theme: "light" }));
+    await waitFor(() => expect(document.documentElement).not.toHaveClass("dark"));
+  });
+
+  it("re-setup keeps the chosen theme", async () => {
+    vi.mocked(listTerminals).mockResolvedValue([{ id: "t1", name: "Theke 1" }]);
+    vi.mocked(fetchCatalog).mockResolvedValue({ catalog, clockSkewMs: 0 });
+    setup({ settings: { ...settings, theme: "dark" }, catalog });
+    fireEvent.click(await screen.findByRole("button", { name: "Einstellungen" }));
+    click("Terminal neu einrichten");
+    click("Terminals laden");
+    await screen.findByRole("button", { name: "Theke 1" });
+    fireEvent.change(screen.getByLabelText("Terminal-Schlüssel"), { target: { value: "key-2" } });
+    click("Einrichten & Artikel abholen");
+    await enterPin();
+    expect(await screen.findByRole("button", { name: /Bier/ })).toBeInTheDocument();
+    expect(vi.mocked(fake.bridge.saveSettings).mock.calls.at(-1)![0]).toMatchObject({ terminalKey: "key-2", theme: "dark" });
+    expect(document.documentElement).toHaveClass("dark");
+  });
+
   it("after a key rotation the same terminal is set up again and its pending bookings are uploaded", async () => {
     const NOT_SWITCHABLE = "Erst alle Buchungen übertragen – Terminal kann nicht gewechselt werden";
     vi.mocked(uploadAll).mockRejectedValueOnce(new SyncError("Terminal-Schlüssel ungültig – bitte Terminal neu einrichten"));
