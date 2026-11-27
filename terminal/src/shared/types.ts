@@ -4,11 +4,15 @@ export interface NewEvent { orderId: string; type: BookingEventType; data: Recor
 export interface LocalEvent extends NewEvent { seq: number }
 export type CatalogItem = CatalogSnapshot["items"][number];
 export type CatalogGroup = CatalogSnapshot["groups"][number];
+/** Light, dark, or follow the operating system. */
+export type ThemePreference = "system" | "light" | "dark";
 export interface SavedPrinter { vendorId: number; productId: number; name: string }
 export interface TerminalSettings {
   serverUrl: string; terminalId: string; terminalKey: string;
   changeCalculator: boolean; printer: SavedPrinter | null; paperWidth: "58" | "80";
   lastCatalogFetchAt: string | null; clockSkewMs: number | null;
+  /** Missing in settings saved before light mode existed: counts as "system". */
+  theme?: ThemePreference;
 }
 export interface UsbDeviceChoice { deviceId: string; productName?: string; vendorId: number; productId: number }
 export interface TerminalBridge {   // window.terminal
