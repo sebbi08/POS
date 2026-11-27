@@ -9,7 +9,7 @@ import PinDialog from "./components/PinDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import SetupWizard from "./components/SetupWizard";
 import StatusBar from "./components/StatusBar";
-import { useTheme } from "./lib/theme";
+import { normalizeTheme, useTheme } from "./lib/theme";
 import { useFullScreen } from "./state/useFullScreen";
 import { useTerminal } from "./state/useTerminal";
 
@@ -39,7 +39,7 @@ export default function App() {
 
 function Till() {
   const t = useTerminal();
-  useTheme(t.settings?.theme ?? "system");
+  useTheme(normalizeTheme(t.settings?.theme));
   const fullScreen = useFullScreen();
   const { actions } = t;
   const [resetup, setResetup] = useState(false);

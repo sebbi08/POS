@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ThemePreference } from "../../shared/types";
 import { fakeMatchMedia } from "../test/fake-match-media";
-import { applyTheme, resolveTheme, useTheme } from "./theme";
+import { applyTheme, normalizeTheme, resolveTheme, useTheme } from "./theme";
 
 const originalMatchMedia = window.matchMedia;
 
@@ -18,6 +18,13 @@ describe("theme", () => {
     expect(resolveTheme("system", false)).toBe("light");
     expect(resolveTheme("light", true)).toBe("light");
     expect(resolveTheme("dark", false)).toBe("dark");
+  });
+
+  it("normalizeTheme treats missing or unknown values as system", () => {
+    expect(normalizeTheme(undefined)).toBe("system");
+    expect(normalizeTheme("blau")).toBe("system");
+    expect(normalizeTheme("dark")).toBe("dark");
+    expect(normalizeTheme("light")).toBe("light");
   });
 
   it("applyTheme toggles the dark class and color-scheme", () => {

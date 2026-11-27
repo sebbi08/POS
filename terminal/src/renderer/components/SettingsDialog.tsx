@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { TouchDialog } from "@/components/ui/touch-dialog";
 import type { TerminalSettings, ThemePreference } from "../../shared/types";
 import PrinterSettings from "./PrinterSettings";
+import { normalizeTheme } from "../lib/theme";
 
 const THEMES: { value: ThemePreference; label: string }[] = [
   { value: "system", label: "System" },
@@ -32,7 +33,7 @@ function resetupBlocker({ hasOpenOrder, syncing }: Props): string | null {
 function SettingsDialog(props: Props) {
   const { settings, onSave, onResetup, onClose } = props;
   const blocker = resetupBlocker(props);
-  const theme = settings.theme ?? "system";
+  const theme = normalizeTheme(settings.theme);
 
   return (
     <TouchDialog title="Einstellungen" onClose={onClose} className="w-[28rem]">

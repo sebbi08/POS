@@ -31,6 +31,11 @@ describe("SettingsDialog theme", () => {
     expect(screen.getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("shows System active for an unknown stored theme", () => {
+    renderDialog({ ...base, theme: "blau" as unknown as TerminalSettings["theme"] });
+    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("saves the chosen theme as a patch", () => {
     const onSave = renderDialog(base);
     fireEvent.click(screen.getByRole("button", { name: "Dunkel" }));

@@ -2,6 +2,12 @@ import { useEffect } from "react";
 import type { ThemePreference } from "../../shared/types";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
+const PREFERENCES: readonly ThemePreference[] = ["system", "light", "dark"];
+
+/** The stored value as a preference; missing (older settings) or unknown values count as "system". */
+export function normalizeTheme(value: unknown): ThemePreference {
+  return PREFERENCES.find((p) => p === value) ?? "system";
+}
 
 export function resolveTheme(pref: ThemePreference, systemDark: boolean): "light" | "dark" {
   if (pref === "system") return systemDark ? "dark" : "light";
