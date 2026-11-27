@@ -8,6 +8,7 @@ import TerminalConfig from "../components/TerminalConfig";
 import ReportOverview from "../components/ReportOverview";
 import TransactionHistory from "../components/TransactionHistory";
 import CatalogImportExport from "../components/CatalogImportExport";
+import ThemeToggle from "../components/ThemeToggle";
 
 type Tab = "groups" | "items" | "terminals" | "company" | "report" | "transactions" | "import-export";
 
@@ -57,7 +58,8 @@ function AdminLayout() {
             </Button>
           ))}
         </div>
-        <div className="p-3 border-t border-border">
+        <div className="p-3 border-t border-border space-y-2">
+          <ThemeToggle />
           <Button variant="destructive" className="w-full" onClick={() => navigate("/")}>
             Abmelden
           </Button>

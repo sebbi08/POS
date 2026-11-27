@@ -45,7 +45,7 @@ describe("Login Page", () => {
     await user.click(screen.getByText("3"));
     await user.click(screen.getByText("4"));
 
-    const dots = document.querySelectorAll(".bg-blue-400");
+    const dots = document.querySelectorAll(".rounded-full.bg-primary");
     expect(dots).toHaveLength(4);
   });
 

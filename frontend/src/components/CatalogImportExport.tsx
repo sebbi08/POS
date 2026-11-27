@@ -168,7 +168,7 @@ function CatalogImportExport() {
 
           {result && (
             <Alert>
-              <AlertDescription className="text-emerald-400">{result}</AlertDescription>
+              <AlertDescription className="text-emerald-700 dark:text-emerald-400">{result}</AlertDescription>
             </Alert>
           )}
 
@@ -176,7 +176,7 @@ function CatalogImportExport() {
             <div className="space-y-4">
               {preview.groupsToCreate.length > 0 && (
                 <div>
-                  <h3 className="text-blue-400 text-sm font-semibold mb-2">
+                  <h3 className="text-blue-700 dark:text-blue-400 text-sm font-semibold mb-2">
                     Warengruppen anlegen ({preview.groupsToCreate.length})
                   </h3>
                   <Table>
@@ -188,7 +188,7 @@ function CatalogImportExport() {
                     </TableHeader>
                     <TableBody>
                       {preview.groupsToCreate.map((g, i) => (
-                        <TableRow key={i} className="text-blue-300">
+                        <TableRow key={i} className="text-blue-700 dark:text-blue-300">
                           <TableCell>{g.name}</TableCell>
                           <TableCell className="text-right">{g.vatRate}%</TableCell>
                         </TableRow>
@@ -200,7 +200,7 @@ function CatalogImportExport() {
 
               {preview.itemsToCreate.length > 0 && (
                 <div>
-                  <h3 className="text-emerald-400 text-sm font-semibold mb-2">
+                  <h3 className="text-emerald-700 dark:text-emerald-400 text-sm font-semibold mb-2">
                     Artikel anlegen ({preview.itemsToCreate.length})
                   </h3>
                   <Table>
@@ -214,7 +214,7 @@ function CatalogImportExport() {
                     </TableHeader>
                     <TableBody>
                       {preview.itemsToCreate.map((item, i) => (
-                        <TableRow key={i} className="text-emerald-300">
+                        <TableRow key={i} className="text-emerald-700 dark:text-emerald-300">
                           <TableCell className="font-mono">{shortId(item.id)}</TableCell>
                           <TableCell>{item.name}</TableCell>
                           <TableCell>{item.groupName}</TableCell>
@@ -228,7 +228,7 @@ function CatalogImportExport() {
 
               {preview.itemsToUpdate.length > 0 && (
                 <div>
-                  <h3 className="text-yellow-400 text-sm font-semibold mb-2">
+                  <h3 className="text-amber-700 dark:text-yellow-400 text-sm font-semibold mb-2">
                     Artikel aktualisieren ({preview.itemsToUpdate.length})
                   </h3>
                   <Table>
@@ -242,7 +242,7 @@ function CatalogImportExport() {
                     </TableHeader>
                     <TableBody>
                       {preview.itemsToUpdate.map((item, i) => (
-                        <TableRow key={i} className="text-yellow-300">
+                        <TableRow key={i} className="text-amber-700 dark:text-yellow-300">
                           <TableCell className="font-mono">{shortId(item.id)}</TableCell>
                           <TableCell>
                             <span className="text-muted-foreground line-through">{item.oldName}</span> → {item.name}

@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api } from "../api/client";
+import ThemeToggle from "../components/ThemeToggle";
 
 function Login() {
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4">
       <Card className="w-96 p-8 shadow-2xl">
         <h1 className="text-foreground text-2xl font-bold text-center">Administrator-Anmeldung</h1>
         <p className="text-muted-foreground text-xs text-center">Administrator-PIN eingeben</p>
@@ -52,7 +53,7 @@ function Login() {
 
         <div className="bg-muted rounded-lg p-4 flex justify-center gap-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className={`w-3 h-3 rounded-full ${i < pin.length ? "bg-blue-400" : "bg-border"}`} />
+            <div key={i} className={`w-3 h-3 rounded-full ${i < pin.length ? "bg-primary" : "bg-border"}`} />
           ))}
         </div>
 
@@ -76,6 +77,9 @@ function Login() {
           </Button>
         </div>
       </Card>
+      <div className="w-64">
+        <ThemeToggle />
+      </div>
     </div>
   );
 }
